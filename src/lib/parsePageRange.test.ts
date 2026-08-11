@@ -40,7 +40,7 @@ describe("parsePageRange (T-3 / P1-6 / P1-7)", () => {
   it('rejects page "0" as out of range', () => {
     const result = parsePageRange("0", 5);
     expect(result.indices).toEqual([]);
-    expect(result.errors).toEqual(["Pages 0 are outside this 5-page document."]);
+    expect(result.errors).toEqual(["Page 0 is outside this 5-page document."]);
   });
 
   it("reports a reversed range with a suggested fix (P1-6)", () => {
@@ -52,7 +52,7 @@ describe("parsePageRange (T-3 / P1-6 / P1-7)", () => {
   it("reports pages beyond maxPages (P1-6)", () => {
     const result = parsePageRange("99", 5);
     expect(result.indices).toEqual([]);
-    expect(result.errors).toEqual(["Pages 99 are outside this 5-page document."]);
+    expect(result.errors).toEqual(["Page 99 is outside this 5-page document."]);
   });
 
   it("reports multiple out-of-range pages together", () => {
@@ -70,7 +70,7 @@ describe("parsePageRange (T-3 / P1-6 / P1-7)", () => {
   it("reports partial invalidity instead of silently dropping bad segments (P1-6)", () => {
     const result = parsePageRange("1-3, 99", 5);
     expect(result.indices).toEqual([0, 1, 2]);
-    expect(result.errors).toEqual(["Pages 99 are outside this 5-page document."]);
+    expect(result.errors).toEqual(["Page 99 is outside this 5-page document."]);
   });
 
   it("preserves input order — deliberate P1-7 behaviour", () => {
@@ -103,13 +103,32 @@ describe("splitPdf page-range surfacing (T-3)", () => {
 
   it("surfaces specific range errors instead of a generic message (P1-6)", async () => {
     await expect(splitPdf(await makePdfFile(5), "1-3, 99")).rejects.toThrow(
-      /Pages 99 are outside this 5-page document/,
+      /Page 99 is outside this 5-page document/,
     );
   });
 
   it("surfaces a reversed-range suggestion", async () => {
     await expect(splitPdf(await makePdfFile(5), "5-3")).rejects.toThrow(
       /"5-3" is backwards/,
+    );
+  });
+
+  it("keeps a wildly out-of-range message short enough to read", () => {
+    // "1-1000" against a 5-page document used to enumerate all 995 missing
+    // pages, producing a ~5000-character string rendered into a toast.
+    const result = parsePageRange("1-1000", 5);
+    expect(result.indices).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].length).toBeLessThan(120);
+    expect(result.errors[0]).toMatch(/and \d+ more/);
+  });
+
+  it("uses singular wording for a single out-of-range page", () => {
+    expect(parsePageRange("99", 5).errors[0]).toBe(
+      "Page 99 is outside this 5-page document.",
+    );
+    expect(parsePageRange("99,104", 5).errors[0]).toBe(
+      "Pages 99, 104 are outside this 5-page document.",
     );
   });
 });

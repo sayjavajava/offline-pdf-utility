@@ -116,7 +116,17 @@ export function parsePageRange(rangeStr: string, maxPages: number): ParsePageRan
 
     if (outOfRange.length > 0) {
         const listed = [...new Set(outOfRange)];
-        errors.push(`Pages ${listed.join(', ')} are outside this ${maxPages}-page document.`);
+        // A wide range like "1-1000" would otherwise enumerate every page past
+        // the end, producing a multi-thousand-character message in a toast.
+        const MAX_LISTED = 8;
+        const shown = listed.slice(0, MAX_LISTED).join(', ');
+        const remaining = listed.length - MAX_LISTED;
+
+        errors.push(
+            listed.length === 1
+                ? `Page ${shown} is outside this ${maxPages}-page document.`
+                : `Pages ${shown}${remaining > 0 ? ` and ${remaining} more` : ''} are outside this ${maxPages}-page document.`,
+        );
     }
 
     return { indices, errors };

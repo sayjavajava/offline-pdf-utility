@@ -17,8 +17,11 @@ export async function assertPdfFile(file: File): Promise<void> {
   if (!hasPdfExtension(file.name)) {
     throw new Error(`"${file.name}" does not look like a PDF. Please choose a .pdf file.`);
   }
-  const bytes = await file.arrayBuffer();
-  if (!hasPdfMagic(bytes)) {
+  // Read only the header. Buffering the whole file here would allocate a second
+  // full copy purely to inspect five bytes — on exactly the large files this
+  // module warns about, and just before the tool reads the file again anyway.
+  const header = await file.slice(0, PDF_MAGIC.length).arrayBuffer();
+  if (!hasPdfMagic(header)) {
     throw new Error(`"${file.name}" is not a valid PDF (missing %PDF- header).`);
   }
 }

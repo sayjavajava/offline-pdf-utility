@@ -1,7 +1,7 @@
 /**
  * Unit tests for file-validation helpers (P1-11).
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   assertPdfFile,
   hasPdfExtension,
@@ -40,5 +40,20 @@ describe("file-validation (P1-11)", () => {
     expect(largeFileWarning(big)).toMatch(/MB/);
     const small = new File([new Uint8Array(10)], "small.pdf");
     expect(largeFileWarning(small)).toBeNull();
+  });
+});
+
+describe("assertPdfFile reads only the header", () => {
+  it("does not buffer the whole file to check five magic bytes", async () => {
+    const big = await makePdfFile(1, "big.pdf");
+    const arrayBufferSpy = vi.spyOn(big, "arrayBuffer");
+    const sliceSpy = vi.spyOn(big, "slice");
+
+    await assertPdfFile(big);
+
+    // Reading the full file here would allocate a second copy of a
+    // potentially 100MB document purely to inspect its header.
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
+    expect(sliceSpy).toHaveBeenCalledWith(0, 5);
   });
 });
