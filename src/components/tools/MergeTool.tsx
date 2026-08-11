@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { mergePdf } from '@/lib/pdf-utils';
 import { downloadBlob, reportToolError } from '@/lib/download';
+import { assertPdfFile, largeFileWarning } from '@/lib/file-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,10 +12,26 @@ export const MergeTool = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files;
+    if (!list || list.length === 0) {
+      setFiles([]);
+      return;
     }
+
+    const accepted: File[] = [];
+    for (const file of Array.from(list)) {
+      try {
+        await assertPdfFile(file);
+        accepted.push(file);
+        const warning = largeFileWarning(file);
+        if (warning) toast({ title: 'Large file', description: `${file.name}: ${warning}` });
+      } catch (error) {
+        reportToolError(toast, 'Invalid file', error);
+      }
+    }
+    setFiles(accepted);
+    if (accepted.length === 0) e.target.value = '';
   };
 
   const handleMerge = async () => {
@@ -36,19 +53,21 @@ export const MergeTool = () => {
   };
 
   return (
-    <div className="space-y-4 text-white">
+    <div className="space-y-4 text-foreground">
       <h2 className="text-2xl font-bold">Merge PDFs</h2>
       <div>
         <Label htmlFor="files">PDF Files</Label>
         <Input id="files" type="file" onChange={handleFileChange} accept=".pdf" multiple />
         {files.length > 0 && (
           <div className="mt-2">
-            <p>{files.length} files selected:</p>
-            <ul className="list-disc list-inside">
+            <p className="text-sm text-muted-foreground">
+              {files.length} files selected — merged in this order:
+            </p>
+            <ol className="list-decimal list-inside mt-1">
               {files.map((file, index) => (
-                <li key={index}>{file.name}</li>
+                <li key={`${file.name}-${index}`}>{file.name}</li>
               ))}
-            </ul>
+            </ol>
           </div>
         )}
       </div>

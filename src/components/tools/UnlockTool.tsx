@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { removePdfPassword } from '@/lib/pdf-utils';
 import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
+import { assertPdfFile, largeFileWarning } from '@/lib/file-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,9 +13,21 @@ export const UnlockTool = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFile(e.target.files[0]);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.files?.[0] ?? null;
+    if (!next) {
+      setFile(null);
+      return;
+    }
+    try {
+      await assertPdfFile(next);
+      setFile(next);
+      const warning = largeFileWarning(next);
+      if (warning) toast({ title: 'Large file', description: warning });
+    } catch (error) {
+      setFile(null);
+      e.target.value = '';
+      reportToolError(toast, 'Invalid file', error);
     }
   };
 
@@ -37,13 +50,13 @@ export const UnlockTool = () => {
   };
 
   return (
-    <div className="space-y-4 text-white">
+    <div className="space-y-4 text-foreground">
       <h2 className="text-2xl font-bold">Remove PDF Protection</h2>
-      <p className="text-sm text-gray-400">This tool removes the password from an encrypted PDF.</p>
+      <p className="text-sm text-muted-foreground">This tool removes the password from an encrypted PDF.</p>
       <div>
         <Label htmlFor="file">PDF File</Label>
         <Input id="file" type="file" onChange={handleFileChange} accept=".pdf" />
-        {file && <p className="text-sm text-gray-400 mt-2">Selected file: {file.name}</p>}
+        {file && <p className="text-sm text-muted-foreground mt-2">Selected file: {file.name}</p>}
       </div>
       <div>
         <Label htmlFor="password">Password</Label>

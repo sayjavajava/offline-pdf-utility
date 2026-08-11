@@ -1,16 +1,14 @@
 import { useState } from 'react';
 import { 
-  FileText, 
   Scissors, 
   Copy, 
   Edit3, 
   RefreshCw, 
-  Minimize, 
-  Lock,
   Shield,
   Sparkles
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
+import { Button } from "@/components/ui/button";
 import { SplitTool } from './tools/SplitTool';
 import { MergeTool } from './tools/MergeTool';
 import { UnlockTool } from './tools/UnlockTool';
@@ -86,32 +84,39 @@ export const GlassDashboard = () => {
           </p>
         </div>
 
-        {/* Tools grid with staggered animations */}
-              {activeTool ? (
-        <div>
-          <button onClick={() => setActiveTool(null)} className="text-white mb-4">Back to Tools</button>
-          {activeTool === 'split' && <SplitTool />}
-          {activeTool === 'merge' && <MergeTool />}
-          {activeTool === 'unlock' && <UnlockTool />}
-          {activeTool === 'edit' && <EditTool />}
-          {activeTool === 'convert' && <ConvertTool />}
-          {activeTool === 'watermark' && <AddWatermarkTool />}
-          {/* Other tools will be rendered here */}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">
-          {pdfTools.map((tool, index) => (
-            <GlassPDFCard
-              key={tool.id}
-              title={tool.title}
-              description={tool.description}
-              icon={tool.icon}
-              onClick={() => handleToolClick(tool.id)}
-              delay={index * 100}
-            />
-          ))}
-        </div>
-      )}
+        {activeTool ? (
+          <div>
+            <Button
+              type="button"
+              variant="ghost"
+              className="mb-4"
+              onClick={() => setActiveTool(null)}
+              aria-label="Back to Tools"
+            >
+              Back to Tools
+            </Button>
+            {activeTool === 'split' && <SplitTool />}
+            {activeTool === 'merge' && <MergeTool />}
+            {activeTool === 'unlock' && <UnlockTool />}
+            {activeTool === 'edit' && <EditTool />}
+            {activeTool === 'convert' && <ConvertTool />}
+            {activeTool === 'watermark' && <AddWatermarkTool />}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">
+            {pdfTools.map((tool, index) => (
+              <GlassPDFCard
+                key={tool.id}
+                title={tool.title}
+                description={tool.description}
+                icon={tool.icon}
+                onClick={() => handleToolClick(tool.id)}
+                delay={index * 100}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Security badge */}
         <div className="text-center">
           <div className="inline-flex items-center space-x-3 bg-glass-bg backdrop-blur-sm border border-glass-border rounded-2xl px-6 py-4 shadow-glass">

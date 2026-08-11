@@ -293,18 +293,57 @@ export async function convertImageToPdf(file: File): Promise<Blob> {
 
 /**
  * Converts a DOCX file to a PDF.
- * @param file The DOCX file to convert.
- * @returns A Blob of the new PDF file.
+ *
+ * Output is a rasterized image of each page (html2canvas → jsPDF), so text is
+ * not selectable. Callers should surface that limitation in the UI (P1-16).
+ *
+ * @returns The PDF blob plus any non-blocking mammoth warnings.
  */
-export async function convertDocxToPdf(file: File): Promise<Blob> {
+export async function convertDocxToPdf(
+    file: File,
+): Promise<{ blob: Blob; warnings: string[] }> {
     const arrayBuffer = await file.arrayBuffer();
-    const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
+    const { value: html, messages } = await mammoth.convertToHtml({ arrayBuffer });
 
     const element = document.createElement('div');
     element.innerHTML = html;
+    // Print-oriented stylesheet so tables/images fit A4 with margins (P1-16).
+    element.setAttribute(
+        'style',
+        [
+            'font-family: Helvetica, Arial, sans-serif',
+            'font-size: 12pt',
+            'line-height: 1.4',
+            'color: #111',
+            'max-width: 100%',
+            'word-wrap: break-word',
+        ].join(';'),
+    );
+    element.querySelectorAll('table').forEach((table) => {
+        (table as HTMLElement).style.width = '100%';
+        (table as HTMLElement).style.tableLayout = 'fixed';
+        (table as HTMLElement).style.borderCollapse = 'collapse';
+    });
+    element.querySelectorAll('img').forEach((img) => {
+        (img as HTMLElement).style.maxWidth = '100%';
+        (img as HTMLElement).style.height = 'auto';
+    });
 
-    const pdfBlob = await html2pdf().from(element).output('blob');
-    return pdfBlob;
+    const pdfBlob: Blob = await html2pdf()
+        .set({
+            margin: [15, 15, 15, 15],
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['css', 'legacy'] },
+            html2canvas: { scale: 2 },
+        })
+        .from(element)
+        .output('blob');
+
+    const warnings = (messages ?? [])
+        .map((m: { message?: string }) => m.message)
+        .filter((m: string | undefined): m is string => Boolean(m));
+
+    return { blob: pdfBlob, warnings };
 }
 
 /**

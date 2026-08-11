@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { convertImageToPdf, convertDocxToPdf, detectImageFormat } from '@/lib/pdf-utils';
 import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
+import { largeFileWarning } from '@/lib/file-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,8 +13,11 @@ export const ConvertTool = () => {
   const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFile(e.target.files[0]);
+    const next = e.target.files?.[0] ?? null;
+    setFile(next);
+    if (next) {
+      const warning = largeFileWarning(next);
+      if (warning) toast({ title: 'Large file', description: warning });
     }
   };
 
@@ -28,14 +32,20 @@ export const ConvertTool = () => {
       let blob: Blob;
       const lower = file.name.toLowerCase();
       const looksLikeDocx = lower.endsWith('.docx');
-      // Peek at bytes so empty MIME / wrong extension still route correctly (P1-15).
       const bytes = await file.arrayBuffer();
       const imageFormat = detectImageFormat(file, bytes);
 
       if (imageFormat) {
         blob = await convertImageToPdf(file);
       } else if (looksLikeDocx || file.type.includes('wordprocessingml')) {
-        blob = await convertDocxToPdf(file);
+        const { blob: pdfBlob, warnings } = await convertDocxToPdf(file);
+        blob = pdfBlob;
+        if (warnings.length > 0) {
+          toast({
+            title: 'Conversion notes',
+            description: warnings.slice(0, 3).join(' '),
+          });
+        }
       } else {
         toast({ title: 'Unsupported file type', description: 'Please select a JPEG, PNG, or DOCX file.', variant: 'destructive' });
         setIsLoading(false);
@@ -52,13 +62,16 @@ export const ConvertTool = () => {
   };
 
   return (
-    <div className="space-y-4 text-white">
+    <div className="space-y-4 text-foreground">
       <h2 className="text-2xl font-bold">Convert to PDF</h2>
-      <p className="text-sm text-gray-400">Convert JPEG, PNG, or DOCX files to PDF.</p>
+      <p className="text-sm text-muted-foreground">Convert JPEG, PNG, or DOCX files to PDF.</p>
+      <p className="text-sm text-muted-foreground">
+        DOCX conversion renders pages as images; text in the output will not be selectable.
+      </p>
       <div>
         <Label htmlFor="file">File to Convert</Label>
         <Input id="file" type="file" onChange={handleFileChange} accept=".jpg,.jpeg,.png,.docx" />
-        {file && <p className="text-sm text-gray-400 mt-2">Selected file: {file.name}</p>}
+        {file && <p className="text-sm text-muted-foreground mt-2">Selected file: {file.name}</p>}
       </div>
       <Button onClick={handleConvert} disabled={isLoading}>
         {isLoading ? 'Converting...' : 'Convert to PDF'}
