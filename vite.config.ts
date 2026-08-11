@@ -17,6 +17,8 @@ export default defineConfig(({ mode }) => ({
   // fetched in CORS mode — so a normal Vite build never boots there, whatever
   // the router does. Emitting one self-contained HTML file with every asset
   // inlined is what actually makes the documented offline usage work.
+  // Classic (iife) workers: module workers fail to start from file://.
+  worker: { format: 'iife' },
   build: {
     // Fonts are ~260KB total; inline them as data: URIs rather than leaving
     // them as sibling files that file:// will refuse to fetch.
