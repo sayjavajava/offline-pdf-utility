@@ -21,6 +21,16 @@ export const AddWatermarkTool = () => {
     }
   };
 
+  const clampFontSize = () => {
+    if (!Number.isFinite(fontSize) || fontSize < 1) setFontSize(1);
+    else if (fontSize > 300) setFontSize(300);
+  };
+
+  const clampOpacity = () => {
+    if (!Number.isFinite(opacity) || opacity < 0) setOpacity(0);
+    else if (opacity > 1) setOpacity(1);
+  };
+
   const handleAddWatermark = async () => {
     if (!file) {
       toast({ title: 'No file selected', description: 'Please select a PDF file.', variant: 'destructive' });
@@ -54,11 +64,28 @@ export const AddWatermarkTool = () => {
       </div>
       <div>
         <Label htmlFor="fontSize">Font Size</Label>
-        <Input id="fontSize" type="number" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} />
+        <Input
+          id="fontSize"
+          type="number"
+          min={1}
+          max={300}
+          value={fontSize}
+          onChange={(e) => setFontSize(Number(e.target.value))}
+          onBlur={clampFontSize}
+        />
       </div>
       <div>
         <Label htmlFor="opacity">Opacity</Label>
-        <Input id="opacity" type="number" min="0" max="1" step="0.1" value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} />
+        <Input
+          id="opacity"
+          type="number"
+          min={0}
+          max={1}
+          step={0.1}
+          value={opacity}
+          onChange={(e) => setOpacity(Number(e.target.value))}
+          onBlur={clampOpacity}
+        />
       </div>
       <div>
         <Label htmlFor="password">PDF Password (if protected)</Label>

@@ -280,15 +280,41 @@ export async function addWatermark(
     options: { fontSize: number; color: [number, number, number]; opacity: number },
     password?: string
 ): Promise<Blob> {
+    if (!text || !text.trim()) {
+        throw new Error('Enter watermark text.');
+    }
+    if (!Number.isFinite(options.opacity) || options.opacity < 0 || options.opacity > 1) {
+        throw new Error('Opacity must be between 0 and 1.');
+    }
+    if (!Number.isFinite(options.fontSize) || options.fontSize <= 0 || options.fontSize > 300) {
+        throw new Error('Font size must be between 1 and 300.');
+    }
+
     const pdfDoc = await loadPdf(file, password);
 
     const helveticaFont = await pdfDoc.embedFont('Helvetica-Bold');
+
+    // Standard Helvetica is WinAnsi. @cantoo/pdf-lib does not throw on
+    // unencodable glyphs — it silently replaces them with '?'. Detect that
+    // before drawing so the user gets a readable message naming the character
+    // (P0-4) instead of a watermark full of question marks.
+    const offending = [...text].find((ch) => {
+        if (ch === '?') return false;
+        return helveticaFont.encodeText(ch).asString() === '3F';
+    });
+    if (offending !== undefined) {
+        throw new Error(
+            `The watermark text contains characters this font cannot render (${offending}). Use Latin characters, or choose a different font.`,
+        );
+    }
+
     const pages = pdfDoc.getPages();
 
     for (const page of pages) {
         const { width, height } = page.getSize();
+        const textWidth = helveticaFont.widthOfTextAtSize(text, options.fontSize);
         page.drawText(text, {
-            x: width / 2 - (text.length * options.fontSize) / 4,
+            x: (width - textWidth) / 2,
             y: height / 2,
             font: helveticaFont,
             size: options.fontSize,
