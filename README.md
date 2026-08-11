@@ -20,6 +20,8 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
 - **Add Watermark**: Apply a text watermark to every page of your PDF.
 - **Rotate Pages**: Rotate selected pages (or the whole document) by 90°, 180°, or 270°.
 - **Delete / Reorder Pages**: Keep pages in a custom order; omit pages to delete them.
+- **Add Page Numbers**: Stamp sequential page numbers, "page x of y", or zero-padded Bates
+  numbers (with an optional prefix) for legal documents.
 
 ## How to Use
 

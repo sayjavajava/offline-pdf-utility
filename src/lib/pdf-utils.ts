@@ -48,6 +48,30 @@ async function loadPdf(file: File, password?: string): Promise<PDFDocument> {
     }
 }
 
+/**
+ * Guard against silently unrenderable text.
+ *
+ * The standard PDF fonts are WinAnsi-encoded, and @cantoo/pdf-lib does not
+ * throw on a glyph it cannot encode — it substitutes '?'. Without this check a
+ * CJK or emoji input produces a document full of question marks and reports
+ * success (P0-4).
+ */
+function assertEncodable(
+    font: { encodeText: (text: string) => { asString: () => string } },
+    text: string,
+    label: string,
+): void {
+    const offending = [...text].find((ch) => {
+        if (ch === '?') return false;
+        return font.encodeText(ch).asString() === '3F';
+    });
+    if (offending !== undefined) {
+        throw new Error(
+            `The ${label} contains characters this font cannot render (${offending}). Use Latin characters, or choose a different font.`,
+        );
+    }
+}
+
 export type ParsePageRangeResult = {
     /** 0-based page indices, in the order the user asked for (P1-7). */
     indices: number[];
@@ -402,19 +426,7 @@ export async function addWatermark(
 
     const helveticaFont = await pdfDoc.embedFont('Helvetica-Bold');
 
-    // Standard Helvetica is WinAnsi. @cantoo/pdf-lib does not throw on
-    // unencodable glyphs — it silently replaces them with '?'. Detect that
-    // before drawing so the user gets a readable message naming the character
-    // (P0-4) instead of a watermark full of question marks.
-    const offending = [...text].find((ch) => {
-        if (ch === '?') return false;
-        return helveticaFont.encodeText(ch).asString() === '3F';
-    });
-    if (offending !== undefined) {
-        throw new Error(
-            `The watermark text contains characters this font cannot render (${offending}). Use Latin characters, or choose a different font.`,
-        );
-    }
+    assertEncodable(helveticaFont, text, 'watermark text');
 
     const pages = pdfDoc.getPages();
     const textWidth = helveticaFont.widthOfTextAtSize(text, options.fontSize);
@@ -523,3 +535,129 @@ export async function rearrangePdf(
     return new Blob([pdfBytes], { type: 'application/pdf' });
 }
 
+
+export type PageNumberFormat = 'n' | 'n-of-total' | 'bates';
+
+export type PageNumberPosition =
+    | 'bottom-center'
+    | 'bottom-left'
+    | 'bottom-right'
+    | 'top-center'
+    | 'top-left'
+    | 'top-right';
+
+export type PageNumberOptions = {
+    format?: PageNumberFormat;
+    /** Number given to the first stamped page. Default 1. */
+    start?: number;
+    /** Text before the number — a matter case for Bates, e.g. "ABC-". */
+    prefix?: string;
+    /** Zero-padding width for the `bates` format. Default 6. */
+    digits?: number;
+    position?: PageNumberPosition;
+    fontSize?: number;
+    /** Distance from the page edge, in points. Default 36 (half an inch). */
+    margin?: number;
+    color?: [number, number, number];
+    /** Which pages to stamp, as a page range. Defaults to every page. */
+    pages?: string;
+};
+
+/** Render the label for one stamp. Exported so the UI can preview it (F-6). */
+export function formatPageNumber(
+    value: number,
+    total: number,
+    options: PageNumberOptions = {},
+): string {
+    const prefix = options.prefix ?? '';
+    switch (options.format ?? 'n') {
+        case 'bates':
+            return `${prefix}${String(value).padStart(options.digits ?? 6, '0')}`;
+        case 'n-of-total':
+            return `${prefix}${value} of ${total}`;
+        default:
+            return `${prefix}${value}`;
+    }
+}
+
+/**
+ * Stamps sequential page numbers, or Bates numbers, onto a PDF (F-6).
+ *
+ * Shares the drawing path, font handling and encoding guard with addWatermark
+ * rather than duplicating them.
+ */
+export async function addPageNumbers(
+    file: File,
+    options: PageNumberOptions = {},
+    password?: string,
+): Promise<Blob> {
+    const fontSize = options.fontSize ?? 12;
+    const margin = options.margin ?? 36;
+    const start = options.start ?? 1;
+    const color = options.color ?? [0, 0, 0];
+
+    if (!Number.isFinite(fontSize) || fontSize <= 0 || fontSize > 300) {
+        throw new Error('Font size must be between 1 and 300.');
+    }
+    if (!Number.isFinite(margin) || margin < 0 || margin > 300) {
+        throw new Error('Margin must be between 0 and 300 points.');
+    }
+    if (!Number.isInteger(start) || start < 0) {
+        throw new Error('Starting number must be a whole number of 0 or more.');
+    }
+    if (options.digits !== undefined && (!Number.isInteger(options.digits) || options.digits < 1 || options.digits > 20)) {
+        throw new Error('Bates padding must be between 1 and 20 digits.');
+    }
+    if (color.length !== 3 || color.some((c) => !Number.isFinite(c) || c < 0 || c > 1)) {
+        throw new Error('Colour channels must each be between 0 and 1.');
+    }
+
+    const pdfDoc = await loadPdf(file, password);
+    const pages = pdfDoc.getPages();
+
+    // Which pages get a stamp. Numbering still counts from `start` across the
+    // stamped pages only, which is what "number these pages" is taken to mean.
+    let targets: number[];
+    if (options.pages && options.pages.trim() && options.pages.trim().toLowerCase() !== 'all') {
+        const parsed = parsePageRange(options.pages, pages.length);
+        if (parsed.errors.length > 0) throw new Error(parsed.errors.join(' '));
+        targets = parsed.indices;
+    } else {
+        targets = pages.map((_, i) => i);
+    }
+    if (targets.length === 0) {
+        throw new Error('No pages selected to number.');
+    }
+
+    const font = await pdfDoc.embedFont('Helvetica');
+    if (options.prefix) assertEncodable(font, options.prefix, 'page-number prefix');
+
+    const position = options.position ?? 'bottom-center';
+
+    targets.forEach((pageIndex, ordinal) => {
+        const page = pages[pageIndex];
+        const { width, height } = page.getSize();
+        const label = formatPageNumber(start + ordinal, targets.length, options);
+        const labelWidth = font.widthOfTextAtSize(label, fontSize);
+
+        const x = position.endsWith('left')
+            ? margin
+            : position.endsWith('right')
+              ? width - margin - labelWidth
+              : (width - labelWidth) / 2;
+        // For a top stamp the margin is measured from the top edge down to the
+        // baseline, so the glyph height has to come off it.
+        const y = position.startsWith('top') ? height - margin - fontSize : margin;
+
+        page.drawText(label, {
+            x,
+            y,
+            font,
+            size: fontSize,
+            color: { type: 'RGB', red: color[0], green: color[1], blue: color[2] },
+        });
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+}

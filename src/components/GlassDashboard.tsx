@@ -8,6 +8,7 @@ import {
   Sparkles,
   RotateCw,
   ListOrdered,
+  Hash,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { AddWatermarkTool } from './tools/AddWatermarkTool';
 import { ConvertTool } from './tools/ConvertTool';
 import { RotateTool } from './tools/RotateTool';
 import { RearrangeTool } from './tools/RearrangeTool';
+import { PageNumbersTool } from './tools/PageNumbersTool';
 
 const pdfTools = [
   {
@@ -68,6 +70,12 @@ const pdfTools = [
     title: "Delete / Reorder",
     description: "Keep pages in a custom order; omit pages to delete them.",
     icon: ListOrdered,
+  },
+  {
+    id: "pagenumbers",
+    title: "Add Page Numbers",
+    description: "Stamp sequential or Bates numbers onto every page.",
+    icon: Hash,
   },
 ];
 
@@ -119,6 +127,7 @@ export const GlassDashboard = () => {
             {activeTool === 'watermark' && <AddWatermarkTool />}
             {activeTool === 'rotate' && <RotateTool />}
             {activeTool === 'rearrange' && <RearrangeTool />}
+            {activeTool === 'pagenumbers' && <PageNumbersTool />}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">
