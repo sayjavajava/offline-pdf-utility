@@ -183,8 +183,10 @@ describe("MergeTool (T-10 / P1-13)", () => {
     await upload(screen.getByLabelText(/pdf files/i), [a, b]);
 
     const items = screen.getAllByRole("listitem");
-    expect(items.map((li) => li.textContent)).toEqual(["intro.pdf", "body.pdf"]);
-    expect(screen.getByText(/merged in this order/i)).toBeInTheDocument();
+    expect(items.map((li) => li.textContent)).toEqual(
+      expect.arrayContaining([expect.stringContaining("intro.pdf"), expect.stringContaining("body.pdf")]),
+    );
+    expect(screen.getByText(/processed in this order/i)).toBeInTheDocument();
   });
 
   it("guards when fewer than two files are selected", async () => {

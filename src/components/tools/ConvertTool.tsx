@@ -2,24 +2,15 @@ import { useState } from 'react';
 import { convertImageToPdf, convertDocxToPdf, detectImageFormat } from '@/lib/pdf-utils';
 import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { largeFileWarning } from '@/lib/file-validation';
+import { FilePicker } from '@/components/FilePicker';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 
 export const ConvertTool = () => {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const next = e.target.files?.[0] ?? null;
-    setFile(next);
-    if (next) {
-      const warning = largeFileWarning(next);
-      if (warning) toast({ title: 'Large file', description: warning });
-    }
-  };
+  const file = files[0] ?? null;
 
   const handleConvert = async () => {
     if (!file) {
@@ -68,11 +59,18 @@ export const ConvertTool = () => {
       <p className="text-sm text-muted-foreground">
         DOCX conversion renders pages as images; text in the output will not be selectable.
       </p>
-      <div>
-        <Label htmlFor="file">File to Convert</Label>
-        <Input id="file" type="file" onChange={handleFileChange} accept=".jpg,.jpeg,.png,.docx" />
-        {file && <p className="text-sm text-muted-foreground mt-2">Selected file: {file.name}</p>}
-      </div>
+      <FilePicker
+        files={files}
+        onChange={(next) => {
+          setFiles(next);
+          if (next[0]) {
+            const warning = largeFileWarning(next[0]);
+            if (warning) toast({ title: 'Large file', description: warning });
+          }
+        }}
+        accept=".jpg,.jpeg,.png,.docx"
+        label="File to Convert"
+      />
       <Button onClick={handleConvert} disabled={isLoading}>
         {isLoading ? 'Converting...' : 'Convert to PDF'}
       </Button>

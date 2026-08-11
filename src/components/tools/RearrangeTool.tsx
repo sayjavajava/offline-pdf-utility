@@ -2,35 +2,19 @@ import { useState } from 'react';
 import { rearrangePdf } from '@/lib/pdf-utils';
 import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { assertPdfFile, largeFileWarning } from '@/lib/file-validation';
+import { FilePicker } from '@/components/FilePicker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 
 export const RearrangeTool = () => {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [pages, setPages] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const next = e.target.files?.[0] ?? null;
-    if (!next) {
-      setFile(null);
-      return;
-    }
-    try {
-      await assertPdfFile(next);
-      setFile(next);
-      const warning = largeFileWarning(next);
-      if (warning) toast({ title: 'Large file', description: warning });
-    } catch (error) {
-      setFile(null);
-      e.target.value = '';
-      reportToolError(toast, 'Invalid file', error);
-    }
-  };
+  const file = files[0] ?? null;
 
   const handleRearrange = async () => {
     if (!file) {
@@ -65,11 +49,20 @@ export const RearrangeTool = () => {
         Keep only the pages you list, in that order. Omit a page to delete it;
         list a page more than once to duplicate it.
       </p>
-      <div>
-        <Label htmlFor="file">PDF File</Label>
-        <Input id="file" type="file" onChange={handleFileChange} accept=".pdf" />
-        {file && <p className="text-sm text-muted-foreground mt-2">Selected file: {file.name}</p>}
-      </div>
+      <FilePicker
+        files={files}
+        onChange={(next) => {
+          setFiles(next);
+          if (next[0]) {
+            const warning = largeFileWarning(next[0]);
+            if (warning) toast({ title: 'Large file', description: warning });
+          }
+        }}
+        accept=".pdf"
+        label="PDF File"
+        onValidate={assertPdfFile}
+        onReject={(error) => reportToolError(toast, 'Invalid file', error)}
+      />
       <div>
         <Label htmlFor="pages">Pages to keep (in order)</Label>
         <Input

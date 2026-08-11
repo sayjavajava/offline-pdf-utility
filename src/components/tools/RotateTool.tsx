@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { rotatePdf } from '@/lib/pdf-utils';
 import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { assertPdfFile, largeFileWarning } from '@/lib/file-validation';
+import { FilePicker } from '@/components/FilePicker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,30 +11,13 @@ import { useToast } from '@/components/ui/use-toast';
 const ANGLES = [90, 180, 270] as const;
 
 export const RotateTool = () => {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [pages, setPages] = useState('');
   const [angle, setAngle] = useState<(typeof ANGLES)[number]>(90);
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const next = e.target.files?.[0] ?? null;
-    if (!next) {
-      setFile(null);
-      return;
-    }
-    try {
-      await assertPdfFile(next);
-      setFile(next);
-      const warning = largeFileWarning(next);
-      if (warning) toast({ title: 'Large file', description: warning });
-    } catch (error) {
-      setFile(null);
-      e.target.value = '';
-      reportToolError(toast, 'Invalid file', error);
-    }
-  };
+  const file = files[0] ?? null;
 
   const handleRotate = async () => {
     if (!file) {
@@ -60,11 +44,20 @@ export const RotateTool = () => {
       <p className="text-sm text-muted-foreground">
         Rotate selected pages (or the whole document) by 90°, 180°, or 270°.
       </p>
-      <div>
-        <Label htmlFor="file">PDF File</Label>
-        <Input id="file" type="file" onChange={handleFileChange} accept=".pdf" />
-        {file && <p className="text-sm text-muted-foreground mt-2">Selected file: {file.name}</p>}
-      </div>
+      <FilePicker
+        files={files}
+        onChange={(next) => {
+          setFiles(next);
+          if (next[0]) {
+            const warning = largeFileWarning(next[0]);
+            if (warning) toast({ title: 'Large file', description: warning });
+          }
+        }}
+        accept=".pdf"
+        label="PDF File"
+        onValidate={assertPdfFile}
+        onReject={(error) => reportToolError(toast, 'Invalid file', error)}
+      />
       <div>
         <Label htmlFor="angle">Rotation</Label>
         <select
