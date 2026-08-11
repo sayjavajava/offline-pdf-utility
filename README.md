@@ -43,15 +43,23 @@ For a truly offline experience, you can run this application without any interne
     npm run build
     ```
 
-2.  **Package the files**:
-    This will create a `dist` folder containing all the necessary files. Compress this `dist` folder into a `.zip` file (e.g., `offline-pdf-utility.zip`).
+2.  **Ship `dist/index.html`**:
+    The build produces a single self-contained `dist/index.html` with all
+    JavaScript, CSS, and fonts inlined. That one file *is* the application —
+    there is nothing else to package, and no `.zip` is needed.
+
+    This is deliberate. Browsers treat a page opened from disk as having a
+    `null` origin and fetch module scripts and fonts under CORS rules, so a
+    conventional multi-file build silently refuses to start from `file://`.
+    Inlining every asset is what makes opening the file directly work at all.
 
 ### For End-Users
 
-1.  **Download and Unzip**: Get the `.zip` file from the developer and unzip it on your computer.
-2.  **Open the App**: Navigate into the unzipped folder and open the `index.html` file directly in your web browser.
+1.  **Get the file**: Obtain `index.html` from the developer.
+2.  **Open it**: Double-click it, or open it in your browser. That's it.
 
-The application will now be running completely from your local machine.
+The application runs entirely from your machine, with no network access at
+any point — you can verify this by disconnecting before you open it.
 
 ## Technologies
 

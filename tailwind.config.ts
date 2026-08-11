@@ -83,9 +83,12 @@ export default {
 				'glass': 'var(--glass-shadow)',
 				'glass-hover': 'var(--glass-shadow-hover)'
 			},
+			// The @fontsource-variable packages register the family names with a
+			// "Variable" suffix; naming them 'Inter'/'Space Grotesk' here would
+			// silently fall through to the generic fallback.
 			fontFamily: {
-				'sans': ['Inter', 'sans-serif'],
-				'display': ['Space Grotesk', 'sans-serif']
+				'sans': ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
+				'display': ['Space Grotesk Variable', 'Space Grotesk', 'system-ui', 'sans-serif']
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
