@@ -24,6 +24,8 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
   numbers (with an optional prefix) for legal documents.
 - **Extract Images**: Pull the embedded images out of a PDF without modifying it; several
   images are bundled into a zip.
+- **PDF to Images**: Render pages to PNG at a chosen scale, with a thumbnail preview so you
+  can see the pages before choosing a range.
 
 ## How to Use
 

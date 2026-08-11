@@ -10,6 +10,7 @@ import {
   ListOrdered,
   Hash,
   Images,
+  FileImage,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import { RotateTool } from './tools/RotateTool';
 import { RearrangeTool } from './tools/RearrangeTool';
 import { PageNumbersTool } from './tools/PageNumbersTool';
 import { ExtractImagesTool } from './tools/ExtractImagesTool';
+import { PdfToImagesTool } from './tools/PdfToImagesTool';
 
 const pdfTools = [
   {
@@ -85,6 +87,12 @@ const pdfTools = [
     description: "Pull the embedded images out of a PDF, without changing it.",
     icon: Images,
   },
+  {
+    id: "pdftoimages",
+    title: "PDF to Images",
+    description: "Render pages to PNG, with a thumbnail preview.",
+    icon: FileImage,
+  },
 ];
 
 export const GlassDashboard = () => {
@@ -137,6 +145,7 @@ export const GlassDashboard = () => {
             {activeTool === 'rearrange' && <RearrangeTool />}
             {activeTool === 'pagenumbers' && <PageNumbersTool />}
             {activeTool === 'extractimages' && <ExtractImagesTool />}
+            {activeTool === 'pdftoimages' && <PdfToImagesTool />}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">
