@@ -76,15 +76,18 @@ any point — you can verify this by disconnecting before you open it.
 
 ## Setup and Development
 
+This project uses **npm** (see `packageManager` in `package.json`). Do not commit
+other lockfiles.
+
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/offline-pdf-utility.git
+   git clone https://github.com/sayjavajava/offline-pdf-utility.git
    cd offline-pdf-utility
    ```
 
 2. **Install dependencies:**
    ```bash
-   npm install
+   npm ci
    ```
 
 3. **Run the development server:**
@@ -94,6 +97,10 @@ any point — you can verify this by disconnecting before you open it.
 
 4. **Open the application:**
    Open your browser and navigate to the local URL provided by Vite (usually `http://localhost:5173`).
+
+## License
+
+GPL-3.0-or-later. See [`LICENSE`](LICENSE).
 
 ## Contribution Guidelines
 

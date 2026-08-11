@@ -9,6 +9,7 @@
     "url": "https://github.com/sayjavajava/offline-pdf-utility.git"
   },
   "type": "module",
+  "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
