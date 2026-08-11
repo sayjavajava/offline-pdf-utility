@@ -14,7 +14,7 @@ const TOOL_CARDS = [
   { card: "Unlock PDF", heading: /remove pdf protection/i },
   { card: "Add Watermark", heading: /add watermark/i },
   { card: "Rotate Pages", heading: /rotate pages/i },
-  { card: "Delete \/ Reorder", heading: /delete \/ reorder pages/i },
+  { card: "Delete / Reorder", heading: /delete \/ reorder pages/i },
 ] as const;
 
 describe("GlassDashboard (T-11 / P2-23)", () => {
