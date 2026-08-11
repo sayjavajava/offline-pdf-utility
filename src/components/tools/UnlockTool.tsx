@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { protectPdf } from '@/lib/pdf-utils';
+import { removePdfPassword } from '@/lib/pdf-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,7 +25,7 @@ export const UnlockTool = () => {
 
     setIsLoading(true);
     try {
-      const blob = await protectPdf(file, password);
+      const blob = await removePdfPassword(file, password);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

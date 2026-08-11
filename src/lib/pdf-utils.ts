@@ -1,6 +1,52 @@
-import { PDFDocument } from 'pdf-lib';
+// @cantoo/pdf-lib rather than upstream pdf-lib: it is an API-compatible fork
+// that implements the standard security handler, so encrypted documents can
+// actually be opened. Upstream has no `password` load option at all.
+import { PDFDocument } from '@cantoo/pdf-lib';
 import mammoth from 'mammoth';
 import html2pdf from 'html2pdf.js';
+
+/**
+ * Loads a PDF, decrypting it when a password is supplied.
+ *
+ * The password is always passed through, including as an empty string: an
+ * empty user password is a real thing that genuinely opens some encrypted
+ * files, and is distinct from supplying no password at all. Passing an empty
+ * password to an unencrypted document is harmless.
+ *
+ * Failures are mapped to three distinct outcomes, because collapsing them is
+ * what made the old code unusable — a user with the correct password was told
+ * to re-enter it forever:
+ *
+ *   - encrypted, and the caller supplied nothing  -> ask for a password
+ *   - encrypted, and the supplied password is wrong -> say it is wrong
+ *   - anything else (a corrupt file, say)          -> rethrow untouched, so a
+ *     parse error is never mislabelled as a password problem
+ */
+async function loadPdf(file: File, password?: string): Promise<PDFDocument> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const supplied = password ?? '';
+
+    try {
+        return await PDFDocument.load(bytes, { password: supplied });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        // The library reports "Password incorrect" for a wrong password, and
+        // either "NEEDS PASSWORD" or an EncryptedPDFError ("...is encrypted")
+        // when it has nothing usable to try. Which of the two you get depends
+        // on whether an empty password was passed, so both are handled.
+        const needsPassword = /needs password/i.test(message) || /encrypted/i.test(message);
+        const wrongPassword = /password incorrect/i.test(message);
+
+        if (needsPassword || (wrongPassword && supplied === '')) {
+            throw new Error('This PDF is password protected. Enter its password to continue.');
+        }
+        if (wrongPassword) {
+            throw new Error('Incorrect password for this PDF.');
+        }
+        throw error;
+    }
+}
 
 /**
  * Parses a page range string (e.g., "1, 3-5, 8") into an array of 0-based page indices.
@@ -40,17 +86,7 @@ function parsePageRange(rangeStr: string, maxPages: number): number[] {
  * @returns A Blob of the new PDF file.
  */
 export async function splitPdf(file: File, pages: string, password?: string): Promise<Blob> {
-    const arrayBuffer = await file.arrayBuffer();
-    let pdfDoc;
-
-    try {
-        pdfDoc = await PDFDocument.load(arrayBuffer, { password: password || undefined } as any);
-    } catch (error) {
-        if (error instanceof Error && (error.message.includes('password') || error.message.includes('encrypted'))) {
-            throw new Error('This PDF is password protected. Please enter the correct password.');
-        }
-        throw error;
-    }
+    const pdfDoc = await loadPdf(file, password);
 
     const pageCount = pdfDoc.getPageCount();
     const pageIndices = pages.toLowerCase() === 'all' 
@@ -82,8 +118,10 @@ export async function mergePdf(files: File[]): Promise<Blob> {
     const mergedPdf = await PDFDocument.create();
 
     for (const file of files) {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(arrayBuffer);
+        // Routed through the shared loader so an encrypted member reports the
+        // readable message rather than a raw library throw. Naming the offending
+        // file in the error is a separate fix (see the audit's P1-12).
+        const pdfDoc = await loadPdf(file);
         const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
         copiedPages.forEach(page => mergedPdf.addPage(page));
     }
@@ -93,24 +131,18 @@ export async function mergePdf(files: File[]): Promise<Blob> {
 }
 
 /**
- * Removes the password from an encrypted PDF.
- * Note: This function does not support adding/changing passwords.
+ * Removes password protection from an encrypted PDF.
+ *
+ * Named for what it does: it strips protection, it cannot add it. Adding a
+ * password needs an engine that can *write* encryption, which neither pdf-lib
+ * nor this fork can do.
+ *
  * @param file The encrypted PDF file.
- * @param password The password to unlock the PDF.
+ * @param password The password that opens the PDF.
  * @returns A Blob of the decrypted PDF file.
  */
-export async function protectPdf(file: File, password?: string): Promise<Blob> {
-    const arrayBuffer = await file.arrayBuffer();
-    let pdfDoc;
-
-    try {
-        pdfDoc = await PDFDocument.load(arrayBuffer, { password: password || undefined } as any);
-    } catch (error) {
-        if (error instanceof Error && (error.message.includes('password') || error.message.includes('encrypted'))) {
-            throw new Error('This PDF is password protected. Please enter the correct password.');
-        }
-        throw error;
-    }
+export async function removePdfPassword(file: File, password?: string): Promise<Blob> {
+    const pdfDoc = await loadPdf(file, password);
 
     // Re-saving the document without any encryption options effectively removes the password.
     const pdfBytes = await pdfDoc.save();
@@ -129,17 +161,7 @@ export async function editPdfMetadata(
     metadata: { [key: string]: string },
     password?: string
 ): Promise<Blob> {
-    const arrayBuffer = await file.arrayBuffer();
-    let pdfDoc;
-
-    try {
-        pdfDoc = await PDFDocument.load(arrayBuffer, { password: password || undefined } as any);
-    } catch (error) {
-        if (error instanceof Error && (error.message.includes('password') || error.message.includes('encrypted'))) {
-            throw new Error('This PDF is password protected. Please enter the correct password.');
-        }
-        throw error;
-    }
+    const pdfDoc = await loadPdf(file, password);
 
     if (metadata.title) pdfDoc.setTitle(metadata.title);
     if (metadata.author) pdfDoc.setAuthor(metadata.author);
@@ -206,17 +228,7 @@ export async function addWatermark(
     options: { fontSize: number; color: [number, number, number]; opacity: number },
     password?: string
 ): Promise<Blob> {
-    const arrayBuffer = await file.arrayBuffer();
-    let pdfDoc;
-
-    try {
-        pdfDoc = await PDFDocument.load(arrayBuffer, { password: password || undefined } as any);
-    } catch (error) {
-        if (error instanceof Error && (error.message.includes('password') || error.message.includes('encrypted'))) {
-            throw new Error('This PDF is password protected. Please enter the correct password.');
-        }
-        throw error;
-    }
+    const pdfDoc = await loadPdf(file, password);
 
     const helveticaFont = await pdfDoc.embedFont('Helvetica-Bold');
     const pages = pdfDoc.getPages();
