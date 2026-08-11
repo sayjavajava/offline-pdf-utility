@@ -30,11 +30,34 @@ of this work was not actually running. Both jobs are on Node 22 and `package.jso
 1. **F-6** (page numbers / Bates stamping) — cheapest remaining. Reuses the watermark drawing path,
    its font handling, and the P0-4 encoding validation. No new dependencies.
 2. **F-7** image extraction — pure `@cantoo/pdf-lib`, read-only, no new dependencies.
-3. **F-5**/**F-4** (thumbnails, PDF→images) — highest user value, but both need `pdfjs-dist`.
-   **Verify the offline guarantee before committing to it:** the build is a single inlined
-   `index.html`, so pdf.js's worker cannot be a sibling file. Either inline it as a blob URL or run
-   workerless (which worsens **P2-24**). Prototype this before writing the tool.
-4. **F-9**/**P2-24** (Web Worker + progress), then **F-11** (PWA), then the **F-1** spike.
+3. **F-9**/**P2-24** (Web Worker + progress) — now unblocked, see the worker findings below.
+4. **F-5**/**F-4** (thumbnails, PDF→images) — highest user value; `pdfjs-dist` plus the same worker
+   constraint. Weigh the bundle cost against the single-file build.
+5. **F-1** spike — still needs a prototype and a judgement call on a `0.0.x` dependency.
+
+### Worker feasibility on `file://` — measured, not assumed
+
+Several remaining items need a background worker, and the single-file build means a worker can never
+be a sibling file. Tested in Chromium against the real `dist/index.html` over `file://`:
+
+| Capability | Result |
+|---|---|
+| Classic worker from a blob URL | ✅ **works** — message round-tripped |
+| **Module** worker from a blob URL (`{ type: 'module' }`) | ❌ **fails to start** |
+| `navigator.serviceWorker.register()` | ❌ rejected: *"URL protocol of the current origin ('null') is not supported"* |
+| `isSecureContext` | `true` (misleading — it does not make service workers available here) |
+
+**Consequences:**
+
+- **F-9, F-4, F-5 are viable**, but must use **classic** workers. Bundlers emit module workers by
+  default, so set `worker: { format: 'iife' }` in `vite.config.ts` and confirm the emitted worker is
+  inlined, not referenced as a separate file. A module worker will fail *silently at runtime only in
+  the file:// build* — jsdom tests and `npm run dev` will both pass. Verify in a browser.
+- **F-11 (service worker / PWA) is not achievable for the primary distribution mode** and should not
+  be attempted as written. A service worker requires an http(s) origin; the app ships as a file
+  opened from disk. It would only mean anything alongside a second, *hosted* build target, which
+  does not currently exist. **That is a product decision, not an implementation task** — F-11 is
+  reclassified as blocked pending that call.
 
 **Current baseline** (re-measure before you claim a regression):
 
@@ -1003,7 +1026,10 @@ presets, and a colour picker. The colour is currently hardcoded red `[1,0,0]`
 (`AddWatermarkTool.tsx:31`) with no UI at all, despite `addWatermark` already accepting an RGB tuple —
 so the plumbing is done and only the control is missing.
 
-**F-11 · Service worker / PWA** — makes a *hosted* deployment work offline after first load, and
+**F-11 · Service worker / PWA** — ⛔ **BLOCKED, do not implement as written.** Service workers cannot
+register from `file://` (measured — see the worker findings in the status block), which is the app's
+primary distribution mode. This needs a second hosted build target to mean anything, which is a
+product decision. Original rationale follows: makes a *hosted* deployment work offline after first load, and
 gives installability. Complements **P0-2**, which fixes the `file://` case.
 
 ---
