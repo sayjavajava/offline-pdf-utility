@@ -42,3 +42,6 @@ Thumbs.db
 # Misc
 .npm
 /public/hot
+
+# Build output (published as a GitHub Release artifact, not committed)
+/dist
