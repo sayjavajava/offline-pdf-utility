@@ -16,20 +16,42 @@
 | 5 | P1-6, P1-7, P0-4, P1-12, P1-15, T-3/T-5/T-6/T-7/T-8 | ✅ done — `34fcf90`, `9daab3e`, `78f2520`, `bec703b` |
 | 6 | P1-11, P1-13, P1-14, P1-16, P2-23, T-10, T-11 | ✅ done — `39e961f` |
 | 7 | P2-17, P2-19, P2-18, P2-25 | ✅ done — `d80057a`, `6a162f7`, `b05c5b9` |
-| 8 | F-2, F-3, F-8 | ✅ done — `f3b658f`, `4fed11c` |
-| 8 (rest) | F-4, F-5, F-6, F-7, F-9, F-10, F-11; F-1 spike | ⬜ open |
+| 8 | F-2, F-3, F-8, F-10 | ✅ done — `f3b658f`, `4fed11c`, `41a5290` |
+| 8 (rest) | F-4, F-5, F-6, F-7, F-9, F-11; F-1 spike | ⬜ open |
 | — | P2-24 | ⬜ open (main-thread / progress; pairs with F-9) |
 
-**Next work:** remaining Phase 8 features (start with **F-4**/**F-5**), plus a CI Node bump —
-`jsdom@30` needs Node `^22.22.2` but `.github/workflows` still pins Node 20, so `verify` fails
-before any test runs (`webidl.util.markAsUncloneable is not a function`). Local Node 22.14 still
-passes.
+**CI was red and is now fixed** (`afb6aa9`). `jsdom@30` requires Node `^22.22.2` but both workflow
+jobs pinned Node 20, so `verify` failed before a single test ran — meaning the gate protecting all
+of this work was not actually running. Both jobs are on Node 22 and `package.json` now declares
+`engines`.
+
+**Next work — suggested order:**
+
+1. **F-6** (page numbers / Bates stamping) — cheapest remaining. Reuses the watermark drawing path,
+   its font handling, and the P0-4 encoding validation. No new dependencies.
+2. **F-7** image extraction — pure `@cantoo/pdf-lib`, read-only, no new dependencies.
+3. **F-5**/**F-4** (thumbnails, PDF→images) — highest user value, but both need `pdfjs-dist`.
+   **Verify the offline guarantee before committing to it:** the build is a single inlined
+   `index.html`, so pdf.js's worker cannot be a sibling file. Either inline it as a blob URL or run
+   workerless (which worsens **P2-24**). Prototype this before writing the tool.
+4. **F-9**/**P2-24** (Web Worker + progress), then **F-11** (PWA), then the **F-1** spike.
 
 **Current baseline** (re-measure before you claim a regression):
 
-- `npm run test` → **113 passing** (locally). `npm run typecheck` → clean under `strict`.
+- `npm run test` → **123 passing**. `npm run typecheck` → clean under `strict`.
 - `npm run lint` → **0 errors, 1 warning** (react-refresh on button variants).
-- `npm run build` → single self-contained `dist/index.html` (~2.62 MB after **P2-25**).
+- `npm run build` → single self-contained `dist/index.html` (~2.63 MB).
+
+**Browser-verified** against the `file://` build, not just jsdom: all 8 tools render working forms,
+the grid is keyboard-reachable (**P2-23**), unlock works end to end, the F-10 watermark options
+produce the expected content-stream output, and **zero** network requests are attempted.
+
+### A note on mocks
+
+`src/components/tools/tools.test.tsx` mocks `@/lib/download`. It hand-listed its exports, so adding
+one to that module made unrelated tool tests fail with a misleading assertion diff. It now spreads
+`importOriginal()` and overrides only the side-effecting helpers. **Prefer that pattern** for any
+new module mock.
 
 ### Two corrections to this document
 
@@ -976,7 +998,7 @@ tool. Note that drag-drop bypasses `accept=`, so it depends on **P1-11**'s valid
 exist** (§4): it moves every util across a message boundary, and the unit tests are what will prove
 behaviour is unchanged. `Progress` is already vendored and unused.
 
-**F-10 · Richer watermark options** — rotation (diagonal is the conventional look), tiling, position
+**F-10 · Richer watermark options** ✅ DONE (`41a5290`) — rotation (diagonal is the conventional look), tiling, position
 presets, and a colour picker. The colour is currently hardcoded red `[1,0,0]`
 (`AddWatermarkTool.tsx:31`) with no UI at all, despite `addWatermark` already accepting an RGB tuple —
 so the plumbing is done and only the control is missing.
