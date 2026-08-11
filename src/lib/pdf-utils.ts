@@ -170,10 +170,15 @@ export async function mergePdf(files: File[]): Promise<Blob> {
     const mergedPdf = await PDFDocument.create();
 
     for (const file of files) {
-        // Routed through the shared loader so an encrypted member reports the
-        // readable message rather than a raw library throw. Naming the offending
-        // file in the error is a separate fix (see the audit's P1-12).
-        const pdfDoc = await loadPdf(file);
+        // loadPdf already maps encryption failures to readable messages (P0-3).
+        // Wrap so the user knows *which* of N files failed (P1-12).
+        let pdfDoc: PDFDocument;
+        try {
+            pdfDoc = await loadPdf(file);
+        } catch (cause) {
+            const detail = cause instanceof Error ? cause.message : String(cause);
+            throw new Error(`Could not read "${file.name}": ${detail}`, { cause });
+        }
         const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
         copiedPages.forEach(page => mergedPdf.addPage(page));
     }
@@ -227,6 +232,40 @@ export async function editPdfMetadata(
 }
 
 /**
+ * Resolve an image's format by magic bytes → extension → MIME (P1-15).
+ * Browsers often report an empty `type` when the OS has no MIME mapping.
+ */
+export type ImageFormat = 'jpeg' | 'png';
+
+export function detectImageFormat(file: File, bytes: ArrayBuffer): ImageFormat | null {
+    const header = new Uint8Array(bytes, 0, Math.min(8, bytes.byteLength));
+    const isJpeg =
+        header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+    const isPng =
+        header.length >= 8 &&
+        header[0] === 0x89 &&
+        header[1] === 0x50 &&
+        header[2] === 0x4e &&
+        header[3] === 0x47 &&
+        header[4] === 0x0d &&
+        header[5] === 0x0a &&
+        header[6] === 0x1a &&
+        header[7] === 0x0a;
+
+    if (isJpeg) return 'jpeg';
+    if (isPng) return 'png';
+
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'jpeg';
+    if (name.endsWith('.png')) return 'png';
+
+    if (file.type === 'image/jpeg') return 'jpeg';
+    if (file.type === 'image/png') return 'png';
+
+    return null;
+}
+
+/**
  * Converts an image file (JPEG or PNG) to a PDF.
  * @param file The image file to convert.
  * @returns A Blob of the new PDF file.
@@ -234,10 +273,12 @@ export async function editPdfMetadata(
 export async function convertImageToPdf(file: File): Promise<Blob> {
     const pdfDoc = await PDFDocument.create();
     const imageBytes = await file.arrayBuffer();
+    const format = detectImageFormat(file, imageBytes);
+
     let image;
-    if (file.type === 'image/jpeg') {
+    if (format === 'jpeg') {
         image = await pdfDoc.embedJpg(imageBytes);
-    } else if (file.type === 'image/png') {
+    } else if (format === 'png') {
         image = await pdfDoc.embedPng(imageBytes);
     } else {
         throw new Error('Unsupported image type. Please use JPEG or PNG.');

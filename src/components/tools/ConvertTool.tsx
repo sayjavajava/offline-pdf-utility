@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { convertImageToPdf, convertDocxToPdf } from '@/lib/pdf-utils';
+import { convertImageToPdf, convertDocxToPdf, detectImageFormat } from '@/lib/pdf-utils';
 import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,10 +25,16 @@ export const ConvertTool = () => {
 
     setIsLoading(true);
     try {
-      let blob;
-      if (file.type.startsWith('image/')) {
+      let blob: Blob;
+      const lower = file.name.toLowerCase();
+      const looksLikeDocx = lower.endsWith('.docx');
+      // Peek at bytes so empty MIME / wrong extension still route correctly (P1-15).
+      const bytes = await file.arrayBuffer();
+      const imageFormat = detectImageFormat(file, bytes);
+
+      if (imageFormat) {
         blob = await convertImageToPdf(file);
-      } else if (file.name.endsWith('.docx')) {
+      } else if (looksLikeDocx || file.type.includes('wordprocessingml')) {
         blob = await convertDocxToPdf(file);
       } else {
         toast({ title: 'Unsupported file type', description: 'Please select a JPEG, PNG, or DOCX file.', variant: 'destructive' });

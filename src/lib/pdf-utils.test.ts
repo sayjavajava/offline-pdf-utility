@@ -100,6 +100,6 @@ describe("password threading through the other tools", () => {
   it("reports an encrypted member when merging, instead of throwing raw", async () => {
     await expect(
       mergePdf([await makePdfFile(1), encryptedPdfFile("encrypted-aes-256.pdf")]),
-    ).rejects.toThrow(/password protected/i);
+    ).rejects.toThrow(/Could not read "encrypted-aes-256\.pdf".*password protected/i);
   });
 });
