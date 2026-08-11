@@ -5,7 +5,7 @@
 
 ---
 
-## Status — Phases 1–7 and Phase 8 (F-2, F-3, F-8) are DONE.
+## Status — COMPLETE. Every actionable finding is implemented.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -17,23 +17,47 @@
 | 6 | P1-11, P1-13, P1-14, P1-16, P2-23, T-10, T-11 | ✅ done — `39e961f` |
 | 7 | P2-17, P2-19, P2-18, P2-25 | ✅ done — `d80057a`, `6a162f7`, `b05c5b9` |
 | 8 | F-2, F-3, F-8, F-10 | ✅ done — `f3b658f`, `4fed11c`, `41a5290` |
-| 8 (rest) | F-4, F-5, F-6, F-7, F-9, F-11; F-1 spike | ⬜ open |
-| — | P2-24 | ⬜ open (main-thread / progress; pairs with F-9) |
+| 8 | F-6, F-7, F-9, F-4, F-5 | ✅ done — `121a5a1`, `8d50856`, `f76784e`, `7af39f0` |
+| — | P2-24 | ✅ done — `f76784e` (operations run in a worker) |
+| 8 | **F-1, F-11** | ⛔ **blocked — measured, not deferred. See below.** |
+
+### The two features that cannot be built as specified
+
+Both were attempted and both are blocked by the same property of the product: it
+ships as a single HTML file opened from disk, where the origin is `null`.
+
+**F-11 · Service worker / PWA.** `navigator.serviceWorker.register()` is rejected outright:
+*"The URL protocol of the current origin ('null') is not supported."* Service workers require an
+http(s) origin. This is not a bug to work around — the feature is meaningless for the primary
+distribution mode. It needs a second, **hosted** build target to mean anything, which is a product
+decision. (Note `isSecureContext` reports `true` on `file://`, which misleads anyone reasoning about
+this from feature detection.)
+
+**F-1 · Protect PDF (add a password).** Three independent findings, in order of discovery:
+
+1. Neither `pdf-lib` nor `@cantoo/pdf-lib` can *write* encryption — `SaveOptions` has no password
+   fields. Confirmed from source.
+2. `@jspawn/qpdf-wasm@0.0.2`, the package this document proposed, **does not support `wasmBinary`**
+   — the string appears nowhere in its loader. It can only `fetch` its 1.22 MB `.wasm` as a sibling
+   file. That cannot be inlined into the single-file build, and fetching a sibling from a `null`
+   origin is blocked — the same failure that broke **P0-1**. The package also ships no API surface
+   beyond the CLI and no usage docs (its README points at a `tests` directory it does not include).
+3. Hand-rolling PDF encryption on top of pdf-lib was considered and rejected. Writing a correct
+   AES-256 (R6) security handler means deriving `/O`, `/U`, `/OE`, `/UE` and `/Perms` and encrypting
+   every string and stream. Getting it subtly wrong produces a file the user *believes* is protected
+   — worse than not offering the feature.
+
+**A viable path exists** if this is wanted: a qpdf (or similar) WASM build compiled with Emscripten's
+`wasmBinary` support, letting the binary be inlined as base64. That is a build-and-vendor task, not
+an integration task, and it would add well over a megabyte to a bundle that is already 5.75 MB.
 
 **CI was red and is now fixed** (`afb6aa9`). `jsdom@30` requires Node `^22.22.2` but both workflow
 jobs pinned Node 20, so `verify` failed before a single test ran — meaning the gate protecting all
 of this work was not actually running. Both jobs are on Node 22 and `package.json` now declares
 `engines`.
 
-**Next work — suggested order:**
-
-1. **F-6** (page numbers / Bates stamping) — cheapest remaining. Reuses the watermark drawing path,
-   its font handling, and the P0-4 encoding validation. No new dependencies.
-2. **F-7** image extraction — pure `@cantoo/pdf-lib`, read-only, no new dependencies.
-3. **F-9**/**P2-24** (Web Worker + progress) — now unblocked, see the worker findings below.
-4. **F-5**/**F-4** (thumbnails, PDF→images) — highest user value; `pdfjs-dist` plus the same worker
-   constraint. Weigh the bundle cost against the single-file build.
-5. **F-1** spike — still needs a prototype and a judgement call on a `0.0.x` dependency.
+**Everything actionable in this audit is now implemented.** The only open items are F-1 and F-11,
+both blocked for measured reasons set out below rather than for want of effort.
 
 ### Worker feasibility on `file://` — measured, not assumed
 
@@ -61,9 +85,10 @@ be a sibling file. Tested in Chromium against the real `dist/index.html` over `f
 
 **Current baseline** (re-measure before you claim a regression):
 
-- `npm run test` → **123 passing**. `npm run typecheck` → clean under `strict`.
+- `npm run test` → **161 passing**. `npm run typecheck` → clean under `strict`.
 - `npm run lint` → **0 errors, 1 warning** (react-refresh on button variants).
-- `npm run build` → single self-contained `dist/index.html` (~2.63 MB).
+- `npm run build` → single self-contained `dist/index.html` (~5.75 MB; pdf.js is the largest
+  single contributor, the inlined PDF worker the next).
 
 **Browser-verified** against the `file://` build, not just jsdom: all 8 tools render working forms,
 the grid is keyboard-reachable (**P2-23**), unlock works end to end, the F-10 watermark options
@@ -100,8 +125,16 @@ then the acceptance test caught a **fourth** shape the probe missed. All four ar
 
 - **`loadPdf(file, password?)`** in `src/lib/pdf-utils.ts` — the single load path for every tool,
   owning decryption and the error mapping. Any new PDF-reading code goes through it.
-- **`src/lib/download.ts`** — `downloadBlob`, `stripExtension`, `derivedName`, `reportToolError`
-  (Phase 3). All tools download and surface errors through this.
+- **`src/lib/download.ts`** — `downloadBlob`, `stripExtension`, `derivedName`, `reportToolError`,
+  `hexToRgbUnit` (Phases 3 / F-10). All tools download and surface errors through this.
+- **`src/lib/pdf-ops.ts`** holds the implementations; **`src/lib/pdf.worker.ts`** dispatches to them
+  off the main thread; **`src/lib/pdf-utils.ts`** is the public API that routes through the worker
+  and falls back to an inline call. New operations go in `pdf-ops.ts` and are exposed via
+  `pdf-utils.ts` — that is what puts them on the worker.
+- **`src/lib/pdf-render.ts`** — pdf.js rasterisation (F-4/F-5). Main thread by necessity: it draws
+  to a canvas. Uses the **legacy** pdf.js build deliberately; see the commit for why.
+- **`src/lib/zip.ts`** — STORE-method zip writer and `crc32`, used by both image features.
+- **`src/lib/image-extract.ts`** — embedded-image extraction and PNG reconstruction (F-7).
 - **`src/lib/file-validation.ts`** — PDF extension + `%PDF-` magic checks, large-file warning
   (Phase 6 / **P1-11**).
 - **`src/components/FilePicker.tsx`** — drag-and-drop + multi-file reorder/remove (**F-8**).
