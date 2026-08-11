@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { addWatermark } from '@/lib/pdf-utils';
+import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,19 +30,10 @@ export const AddWatermarkTool = () => {
     setIsLoading(true);
     try {
       const blob = await addWatermark(file, text, { fontSize, color: [1, 0, 0], opacity }, password);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${file.name.split('.')[0]}_watermarked.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, derivedName(file.name, '_watermarked'));
       toast({ title: 'Success!', description: 'Watermark added to your PDF.' });
     } catch (error) {
-      if (error instanceof Error) {
-        toast({ title: 'Error adding watermark', description: error.message, variant: 'destructive' });
-      }
+      reportToolError(toast, 'Error adding watermark', error);
     } finally {
       setIsLoading(false);
     }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { mergePdf } from '@/lib/pdf-utils';
+import { downloadBlob, reportToolError } from '@/lib/download';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,19 +26,10 @@ export const MergeTool = () => {
     setIsLoading(true);
     try {
       const blob = await mergePdf(files);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'merged.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, 'merged.pdf');
       toast({ title: 'Success!', description: 'Your PDFs have been merged successfully.' });
     } catch (error) {
-      if (error instanceof Error) {
-        toast({ title: 'Error merging PDFs', description: error.message, variant: 'destructive' });
-      }
+      reportToolError(toast, 'Error merging PDFs', error);
     } finally {
       setIsLoading(false);
     }

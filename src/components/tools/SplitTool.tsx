@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { splitPdf } from '@/lib/pdf-utils';
+import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,19 +32,10 @@ export const SplitTool = () => {
     setIsLoading(true);
     try {
       const blob = await splitPdf(file, pages, password);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${file.name.replace('.pdf', '')}_split.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, derivedName(file.name, '_split'));
       toast({ title: 'Success!', description: 'Your PDF has been split successfully.' });
     } catch (error) {
-      if (error instanceof Error) {
-        toast({ title: 'Error splitting PDF', description: error.message, variant: 'destructive' });
-      }
+      reportToolError(toast, 'Error splitting PDF', error);
     } finally {
       setIsLoading(false);
     }

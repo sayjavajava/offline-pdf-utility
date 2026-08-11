@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { convertImageToPdf, convertDocxToPdf } from '@/lib/pdf-utils';
+import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,19 +36,10 @@ export const ConvertTool = () => {
         return;
       }
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${file.name.split('.')[0]}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, derivedName(file.name, ''));
       toast({ title: 'Success!', description: 'Your file has been converted to PDF.' });
     } catch (error) {
-      if (error instanceof Error) {
-        toast({ title: 'Error converting file', description: error.message, variant: 'destructive' });
-      }
+      reportToolError(toast, 'Error converting file', error);
     } finally {
       setIsLoading(false);
     }

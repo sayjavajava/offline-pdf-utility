@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { removePdfPassword } from '@/lib/pdf-utils';
+import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,19 +27,10 @@ export const UnlockTool = () => {
     setIsLoading(true);
     try {
       const blob = await removePdfPassword(file, password);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${file.name.replace('.pdf', '')}_unprotected.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, derivedName(file.name, '_unprotected'));
       toast({ title: 'Success!', description: 'The PDF protection has been removed.' });
     } catch (error) {
-      if (error instanceof Error) {
-        toast({ title: 'Error removing protection', description: error.message, variant: 'destructive' });
-      }
+      reportToolError(toast, 'Error removing protection', error);
     } finally {
       setIsLoading(false);
     }

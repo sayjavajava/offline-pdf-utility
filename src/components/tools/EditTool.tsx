@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { editPdfMetadata } from '@/lib/pdf-utils';
+import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,19 +33,10 @@ export const EditTool = () => {
     setIsLoading(true);
     try {
       const blob = await editPdfMetadata(file, metadata, password);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${file.name.replace('.pdf', '')}_edited.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, derivedName(file.name, '_edited'));
       toast({ title: 'Success!', description: 'The PDF metadata has been updated.' });
     } catch (error) {
-      if (error instanceof Error) {
-        toast({ title: 'Error editing PDF', description: error.message, variant: 'destructive' });
-      }
+      reportToolError(toast, 'Error editing PDF', error);
     } finally {
       setIsLoading(false);
     }
