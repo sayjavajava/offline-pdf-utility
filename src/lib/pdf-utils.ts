@@ -48,34 +48,78 @@ async function loadPdf(file: File, password?: string): Promise<PDFDocument> {
     }
 }
 
-/**
- * Parses a page range string (e.g., "1, 3-5, 8") into an array of 0-based page indices.
- * @param rangeStr The page range string.
- * @param maxPages The total number of pages in the document.
- * @returns An array of 0-based page indices.
- */
-function parsePageRange(rangeStr: string, maxPages: number): number[] {
-    const indices = new Set<number>();
-    const ranges = rangeStr.split(',');
+export type ParsePageRangeResult = {
+    /** 0-based page indices, in the order the user asked for (P1-7). */
+    indices: number[];
+    /** Human-readable problems for any rejected segment (P1-6). */
+    errors: string[];
+};
 
-    for (let range of ranges) {
+/**
+ * Parses a page range string (e.g., "1, 3-5, 8") into 0-based page indices.
+ *
+ * Deliberate behaviour (P1-7): input order is preserved and duplicates are kept.
+ * `"5,1"` → `[4, 0]`; `"1,1"` → `[0, 0]`. A single expanded range still yields
+ * each page once (`"1-3"` → `[0, 1, 2]`).
+ *
+ * Invalid segments are collected into `errors` rather than silently dropped
+ * (P1-6), so partial invalidity like `"1-3, 99"` is reported instead of quietly
+ * returning only pages 1–3.
+ */
+export function parsePageRange(rangeStr: string, maxPages: number): ParsePageRangeResult {
+    const indices: number[] = [];
+    const errors: string[] = [];
+    const outOfRange: number[] = [];
+
+    for (let range of rangeStr.split(',')) {
         range = range.trim();
+        if (range === '') continue;
+
         if (range.includes('-')) {
-            const [start, end] = range.split('-').map(n => parseInt(n.trim(), 10));
-            if (!isNaN(start) && !isNaN(end) && start <= end && start >= 1 && end <= maxPages) {
+            const parts = range.split('-');
+            if (parts.length !== 2) {
+                errors.push(`Could not understand "${range}" in the page range.`);
+                continue;
+            }
+            const start = parseInt(parts[0].trim(), 10);
+            const end = parseInt(parts[1].trim(), 10);
+            if (Number.isNaN(start) || Number.isNaN(end) || !/^\d+$/.test(parts[0].trim()) || !/^\d+$/.test(parts[1].trim())) {
+                errors.push(`Could not understand "${range}" in the page range.`);
+                continue;
+            }
+            if (start > end) {
+                errors.push(`"${range}" is backwards — did you mean ${end}-${start}?`);
+                continue;
+            }
+            if (start < 1 || end > maxPages) {
                 for (let i = start; i <= end; i++) {
-                    indices.add(i - 1);
+                    if (i < 1 || i > maxPages) outOfRange.push(i);
                 }
+                continue;
+            }
+            for (let i = start; i <= end; i++) {
+                indices.push(i - 1);
             }
         } else {
-            const page = parseInt(range, 10);
-            if (!isNaN(page) && page >= 1 && page <= maxPages) {
-                indices.add(page - 1);
+            if (!/^\d+$/.test(range)) {
+                errors.push(`Could not understand "${range}" in the page range.`);
+                continue;
             }
+            const page = parseInt(range, 10);
+            if (page < 1 || page > maxPages) {
+                outOfRange.push(page);
+                continue;
+            }
+            indices.push(page - 1);
         }
     }
 
-    return Array.from(indices).sort((a, b) => a - b);
+    if (outOfRange.length > 0) {
+        const listed = [...new Set(outOfRange)];
+        errors.push(`Pages ${listed.join(', ')} are outside this ${maxPages}-page document.`);
+    }
+
+    return { indices, errors };
 }
 
 /**
@@ -89,9 +133,17 @@ export async function splitPdf(file: File, pages: string, password?: string): Pr
     const pdfDoc = await loadPdf(file, password);
 
     const pageCount = pdfDoc.getPageCount();
-    const pageIndices = pages.toLowerCase() === 'all' 
-        ? Array.from({ length: pageCount }, (_, i) => i) 
-        : parsePageRange(pages, pageCount);
+    let pageIndices: number[];
+
+    if (pages.toLowerCase() === 'all') {
+        pageIndices = Array.from({ length: pageCount }, (_, i) => i);
+    } else {
+        const parsed = parsePageRange(pages, pageCount);
+        if (parsed.errors.length > 0) {
+            throw new Error(parsed.errors.join(' '));
+        }
+        pageIndices = parsed.indices;
+    }
 
     if (pageIndices.length === 0) {
         throw new Error('Invalid page range specified.');
