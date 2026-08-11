@@ -5,7 +5,9 @@ import {
   Edit3, 
   RefreshCw, 
   Shield,
-  Sparkles
+  Sparkles,
+  RotateCw,
+  ListOrdered,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,8 @@ import { UnlockTool } from './tools/UnlockTool';
 import { EditTool } from './tools/EditTool';
 import { AddWatermarkTool } from './tools/AddWatermarkTool';
 import { ConvertTool } from './tools/ConvertTool';
+import { RotateTool } from './tools/RotateTool';
+import { RearrangeTool } from './tools/RearrangeTool';
 
 const pdfTools = [
   {
@@ -52,6 +56,18 @@ const pdfTools = [
     title: "Add Watermark",
     description: "Apply a text watermark to every page of your PDF.",
     icon: Sparkles,
+  },
+  {
+    id: "rotate",
+    title: "Rotate Pages",
+    description: "Rotate selected pages by 90°, 180°, or 270°.",
+    icon: RotateCw,
+  },
+  {
+    id: "rearrange",
+    title: "Delete / Reorder",
+    description: "Keep pages in a custom order; omit pages to delete them.",
+    icon: ListOrdered,
   },
 ];
 
@@ -101,6 +117,8 @@ export const GlassDashboard = () => {
             {activeTool === 'edit' && <EditTool />}
             {activeTool === 'convert' && <ConvertTool />}
             {activeTool === 'watermark' && <AddWatermarkTool />}
+            {activeTool === 'rotate' && <RotateTool />}
+            {activeTool === 'rearrange' && <RearrangeTool />}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">

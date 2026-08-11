@@ -18,6 +18,8 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
 - **Edit Metadata**: Modify your PDF's title, author, subject, and keywords.
 - **Convert to PDF**: Convert JPEG, PNG, or DOCX files to PDF format.
 - **Add Watermark**: Apply a text watermark to every page of your PDF.
+- **Rotate Pages**: Rotate selected pages (or the whole document) by 90°, 180°, or 270°.
+- **Delete / Reorder Pages**: Keep pages in a custom order; omit pages to delete them.
 
 ## How to Use
 

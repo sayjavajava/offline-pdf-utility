@@ -1,7 +1,7 @@
 // @cantoo/pdf-lib rather than upstream pdf-lib: it is an API-compatible fork
 // that implements the standard security handler, so encrypted documents can
 // actually be opened. Upstream has no `password` load option at all.
-import { PDFDocument } from '@cantoo/pdf-lib';
+import { PDFDocument, degrees } from '@cantoo/pdf-lib';
 import mammoth from 'mammoth';
 import html2pdf from 'html2pdf.js';
 
@@ -404,6 +404,72 @@ export async function addWatermark(
     }
 
     const pdfBytes = await pdfDoc.save();
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+const ALLOWED_ROTATIONS = new Set([90, 180, 270, -90, -180, -270]);
+
+/**
+ * Rotate selected pages (or all pages) by a multiple of 90° (F-2).
+ * Rotation is applied relative to each page's current angle.
+ */
+export async function rotatePdf(
+    file: File,
+    angle: number,
+    pages = 'all',
+    password?: string,
+): Promise<Blob> {
+    if (!ALLOWED_ROTATIONS.has(angle)) {
+        throw new Error('Rotation angle must be 90, 180, or 270 degrees.');
+    }
+
+    const pdfDoc = await loadPdf(file, password);
+    const pageCount = pdfDoc.getPageCount();
+    let indices: number[];
+
+    if (pages.toLowerCase() === 'all' || pages.trim() === '') {
+        indices = Array.from({ length: pageCount }, (_, i) => i);
+    } else {
+        const parsed = parsePageRange(pages, pageCount);
+        if (parsed.errors.length > 0) throw new Error(parsed.errors.join(' '));
+        if (parsed.indices.length === 0) throw new Error('Invalid page range specified.');
+        indices = [...new Set(parsed.indices)];
+    }
+
+    for (const i of indices) {
+        const page = pdfDoc.getPage(i);
+        const current = page.getRotation().angle;
+        page.setRotation(degrees(current + angle));
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+/**
+ * Rebuild a PDF keeping only the pages listed, in that order (F-3).
+ * Omitting a page deletes it; reordering / duplicating follows P1-7.
+ */
+export async function rearrangePdf(
+    file: File,
+    pages: string,
+    password?: string,
+): Promise<Blob> {
+    if (!pages || !pages.trim()) {
+        throw new Error('Enter the pages to keep, in the desired order.');
+    }
+
+    const pdfDoc = await loadPdf(file, password);
+    const pageCount = pdfDoc.getPageCount();
+    const parsed = parsePageRange(pages, pageCount);
+    if (parsed.errors.length > 0) throw new Error(parsed.errors.join(' '));
+    if (parsed.indices.length === 0) throw new Error('Invalid page range specified.');
+
+    const newPdf = await PDFDocument.create();
+    const copied = await newPdf.copyPages(pdfDoc, parsed.indices);
+    copied.forEach((page) => newPdf.addPage(page));
+
+    const pdfBytes = await newPdf.save();
     return new Blob([pdfBytes], { type: 'application/pdf' });
 }
 
