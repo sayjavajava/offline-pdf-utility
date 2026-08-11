@@ -82,3 +82,54 @@ describe("addWatermark (T-8 / P0-4)", () => {
     expect(centredX + textWidth).toBeLessThanOrEqual(pageWidth);
   });
 });
+
+describe("watermark appearance options (F-10)", () => {
+  it("accepts a rotation and still produces a valid PDF", async () => {
+    const blob = await addWatermark(await makePdfFile(2), "DRAFT", {
+      fontSize: 40,
+      color: [0, 0, 1],
+      opacity: 0.4,
+      rotation: 45,
+    });
+    expect(await pageIndicesOf(blob)).toEqual([0, 1]);
+  });
+
+  it("rejects an out-of-range rotation", async () => {
+    await expect(
+      addWatermark(await makePdfFile(1), "X", {
+        fontSize: 20,
+        color: [1, 0, 0],
+        opacity: 0.5,
+        rotation: 900,
+      }),
+    ).rejects.toThrow(/rotation must be between/i);
+  });
+
+  it("rejects colour channels outside 0–1", async () => {
+    await expect(
+      addWatermark(await makePdfFile(1), "X", {
+        fontSize: 20,
+        color: [2, 0, 0],
+        opacity: 0.5,
+      }),
+    ).rejects.toThrow(/colour channels/i);
+  });
+
+  it("tiling writes more content than a single stamp", async () => {
+    const opts = { fontSize: 20, color: [1, 0, 0] as [number, number, number], opacity: 0.3 };
+    const single = await addWatermark(await makePdfFile(1), "TILED", opts);
+    const tiled = await addWatermark(await makePdfFile(1), "TILED", { ...opts, tile: true });
+    expect((await tiled.arrayBuffer()).byteLength).toBeGreaterThan(
+      (await single.arrayBuffer()).byteLength,
+    );
+  });
+
+  it("defaults to no rotation when omitted", async () => {
+    const blob = await addWatermark(await makePdfFile(1), "PLAIN", {
+      fontSize: 30,
+      color: [0, 0, 0],
+      opacity: 1,
+    });
+    expect(await pageIndicesOf(blob)).toEqual([0]);
+  });
+});

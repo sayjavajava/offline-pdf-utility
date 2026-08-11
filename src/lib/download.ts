@@ -14,6 +14,18 @@ type ToastFn = (props: {
   variant?: "default" | "destructive";
 }) => unknown;
 
+/**
+ * Convert a `#rrggbb` colour input value to the 0–1 RGB triple pdf-lib wants.
+ * Falls back to black rather than throwing, since the value comes from a
+ * native colour input and is always well-formed in practice.
+ */
+export function hexToRgbUnit(hex: string): [number, number, number] {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return [0, 0, 0];
+  const int = parseInt(match[1], 16);
+  return [((int >> 16) & 255) / 255, ((int >> 8) & 255) / 255, (int & 255) / 255];
+}
+
 /** Strip only the final extension; leave earlier dots alone. */
 export function stripExtension(name: string): string {
   return name.replace(/\.[^./\\]+$/, "");

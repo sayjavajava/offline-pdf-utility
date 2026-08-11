@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { addWatermark } from '@/lib/pdf-utils';
-import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
+import { derivedName, downloadBlob, hexToRgbUnit, reportToolError } from '@/lib/download';
 import { assertPdfFile, largeFileWarning } from '@/lib/file-validation';
 import { FilePicker } from '@/components/FilePicker';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,9 @@ export const AddWatermarkTool = () => {
   const [text, setText] = useState('CONFIDENTIAL');
   const [fontSize, setFontSize] = useState(50);
   const [opacity, setOpacity] = useState(0.5);
+  const [color, setColor] = useState('#ff0000');
+  const [rotation, setRotation] = useState(45);
+  const [tile, setTile] = useState(false);
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -28,6 +31,12 @@ export const AddWatermarkTool = () => {
     else if (opacity > 1) setOpacity(1);
   };
 
+  const clampRotation = () => {
+    if (!Number.isFinite(rotation)) setRotation(0);
+    else if (rotation < -360) setRotation(-360);
+    else if (rotation > 360) setRotation(360);
+  };
+
   const handleAddWatermark = async () => {
     if (!file) {
       toast({ title: 'No file selected', description: 'Please select a PDF file.', variant: 'destructive' });
@@ -36,7 +45,12 @@ export const AddWatermarkTool = () => {
 
     setIsLoading(true);
     try {
-      const blob = await addWatermark(file, text, { fontSize, color: [1, 0, 0], opacity }, password);
+      const blob = await addWatermark(
+        file,
+        text,
+        { fontSize, color: hexToRgbUnit(color), opacity, rotation, tile },
+        password,
+      );
       downloadBlob(blob, derivedName(file.name, '_watermarked'));
       toast({ title: 'Success!', description: 'Watermark added to your PDF.' });
     } catch (error) {
@@ -96,6 +110,42 @@ export const AddWatermarkTool = () => {
           aria-describedby="opacity-hint"
         />
         <p id="opacity-hint" className="text-xs text-muted-foreground mt-1">Must be between 0 and 1.</p>
+      </div>
+      <div>
+        <Label htmlFor="color">Colour</Label>
+        <Input
+          id="color"
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          className="h-10 w-20 p-1"
+        />
+      </div>
+      <div>
+        <Label htmlFor="rotation">Rotation (degrees)</Label>
+        <Input
+          id="rotation"
+          type="number"
+          min={-360}
+          max={360}
+          value={rotation}
+          onChange={(e) => setRotation(Number(e.target.value))}
+          onBlur={clampRotation}
+          aria-describedby="rotation-hint"
+        />
+        <p id="rotation-hint" className="text-xs text-muted-foreground mt-1">
+          45° gives the usual diagonal stamp. 0 is horizontal.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          id="tile"
+          type="checkbox"
+          checked={tile}
+          onChange={(e) => setTile(e.target.checked)}
+          className="h-4 w-4"
+        />
+        <Label htmlFor="tile" className="mb-0">Repeat across the whole page</Label>
       </div>
       <div>
         <Label htmlFor="password">PDF Password (if protected)</Label>

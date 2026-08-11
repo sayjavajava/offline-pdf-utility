@@ -364,10 +364,21 @@ export async function convertDocxToPdf(
  * @param password An optional password for encrypted PDFs.
  * @returns A Blob of the new PDF file with the watermark.
  */
+export type WatermarkOptions = {
+    fontSize: number;
+    /** RGB, each channel 0–1. */
+    color: [number, number, number];
+    opacity: number;
+    /** Degrees counter-clockwise. 45 gives the conventional diagonal stamp. */
+    rotation?: number;
+    /** Repeat the text across the whole page instead of stamping it once. */
+    tile?: boolean;
+};
+
 export async function addWatermark(
     file: File,
     text: string,
-    options: { fontSize: number; color: [number, number, number]; opacity: number },
+    options: WatermarkOptions,
     password?: string
 ): Promise<Blob> {
     if (!text || !text.trim()) {
@@ -378,6 +389,13 @@ export async function addWatermark(
     }
     if (!Number.isFinite(options.fontSize) || options.fontSize <= 0 || options.fontSize > 300) {
         throw new Error('Font size must be between 1 and 300.');
+    }
+    const rotation = options.rotation ?? 0;
+    if (!Number.isFinite(rotation) || rotation < -360 || rotation > 360) {
+        throw new Error('Rotation must be between -360 and 360 degrees.');
+    }
+    if (options.color.length !== 3 || options.color.some((c) => !Number.isFinite(c) || c < 0 || c > 1)) {
+        throw new Error('Watermark colour channels must each be between 0 and 1.');
     }
 
     const pdfDoc = await loadPdf(file, password);
@@ -399,17 +417,39 @@ export async function addWatermark(
     }
 
     const pages = pdfDoc.getPages();
+    const textWidth = helveticaFont.widthOfTextAtSize(text, options.fontSize);
+    const radians = (rotation * Math.PI) / 180;
+    const common = {
+        font: helveticaFont,
+        size: options.fontSize,
+        color: { type: 'RGB', red: options.color[0], green: options.color[1], blue: options.color[2] },
+        opacity: options.opacity,
+        rotate: degrees(rotation),
+    };
 
     for (const page of pages) {
         const { width, height } = page.getSize();
-        const textWidth = helveticaFont.widthOfTextAtSize(text, options.fontSize);
+
+        if (options.tile) {
+            // Step by the text's own footprint so stamps do not overlap, with a
+            // gutter proportional to the font size.
+            const stepX = Math.max(textWidth, options.fontSize) + options.fontSize * 2;
+            const stepY = options.fontSize * 4;
+            for (let y = 0; y < height + stepY; y += stepY) {
+                for (let x = 0; x < width + stepX; x += stepX) {
+                    page.drawText(text, { ...common, x, y });
+                }
+            }
+            continue;
+        }
+
+        // drawText rotates about its own origin, so centring a rotated stamp
+        // means walking back half the text's length along the rotated axis
+        // rather than simply halving the page width.
         page.drawText(text, {
-            x: (width - textWidth) / 2,
-            y: height / 2,
-            font: helveticaFont,
-            size: options.fontSize,
-            color: { type: 'RGB', red: options.color[0], green: options.color[1], blue: options.color[2] },
-            opacity: options.opacity,
+            ...common,
+            x: width / 2 - (textWidth / 2) * Math.cos(radians),
+            y: height / 2 - (textWidth / 2) * Math.sin(radians),
         });
     }
 

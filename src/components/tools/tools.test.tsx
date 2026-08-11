@@ -22,7 +22,12 @@ vi.mock("@/components/ui/use-toast", () => ({
   toast: (...args: unknown[]) => toastSpy(...args),
 }));
 
-vi.mock("@/lib/download", () => ({
+// Spy on the side-effecting helpers, but keep the real implementations of the
+// pure ones. A hand-listed mock silently omits anything added later, and the
+// resulting "no export defined" error surfaces as an unrelated assertion
+// failure inside whichever tool used it.
+vi.mock("@/lib/download", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/download")>()),
   downloadBlob: (...args: unknown[]) => downloadBlob(...args),
   derivedName: (...args: unknown[]) => derivedName(...(args as [string, string])),
   reportToolError: (...args: unknown[]) =>

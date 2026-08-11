@@ -3,7 +3,7 @@
  * Pins P1-8 (filename derivation) and P1-9 (deferred revoke).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { derivedName, downloadBlob, reportToolError, stripExtension } from "./download";
+import { derivedName, downloadBlob, hexToRgbUnit, reportToolError, stripExtension } from "./download";
 
 describe("stripExtension / derivedName (P1-8)", () => {
   it.each([
@@ -114,5 +114,19 @@ describe("reportToolError (P0-5)", () => {
       description: "An unexpected error occurred.",
       variant: "destructive",
     });
+  });
+});
+
+describe("hexToRgbUnit (F-10)", () => {
+  it("converts hex colours to 0–1 RGB triples", () => {
+    expect(hexToRgbUnit("#ff0000")).toEqual([1, 0, 0]);
+    expect(hexToRgbUnit("#000000")).toEqual([0, 0, 0]);
+    expect(hexToRgbUnit("#ffffff")).toEqual([1, 1, 1]);
+    expect(hexToRgbUnit("00ff00")).toEqual([0, 1, 0]);
+  });
+
+  it("falls back to black on malformed input rather than throwing", () => {
+    expect(hexToRgbUnit("nonsense")).toEqual([0, 0, 0]);
+    expect(hexToRgbUnit("#fff")).toEqual([0, 0, 0]);
   });
 });
