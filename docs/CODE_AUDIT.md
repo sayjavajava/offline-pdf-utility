@@ -5,27 +5,25 @@
 
 ---
 
-## Status — Phases 1, 2 and 4 are DONE. Start at **Phase 3**.
+## Status — Phases 1–7 and Phase 8 (F-2, F-3, F-8) are DONE.
 
 | Phase | Findings | State |
 |---|---|---|
 | 1 | P0-1, P0-2, P2-20 | ✅ done — `dec8572`, `6d068f1` |
 | 2 | T-1, T-2, P2-21, P2-22 | ✅ done — `56f0f58` |
-| **3** | **P1-10, P0-5, P1-8, P1-9** | **⬜ OPEN — do this first** |
+| 3 | P1-10, P0-5, P1-8, P1-9 | ✅ done — `f3fe35d` |
 | 4 | P0-3, T-4 | ✅ done — `68f2e7e` |
-| **5, 6, 7, 8** | everything else | ⬜ open |
-
-**Phase 4 was done out of order, and Phase 3 was deliberately skipped, not completed.** P0-3 is
-library-layer and did not depend on the component-layer download helper, so it was safe to bring
-forward. Phase 3 remains a genuine prerequisite for Phase 6 — **start there**, or you will apply
-P0-5, P1-8 and P1-9 six times each instead of once.
+| 5 | P1-6, P1-7, P0-4, P1-12, P1-15, T-3/T-5/T-6/T-7/T-8 | ✅ done |
+| 6 | P1-11, P1-13, P1-14, P1-16, P2-23, T-10, T-11 | ✅ done — `39e961f` |
+| 7 | P2-17, P2-19, P2-18, P2-25 | ✅ done |
+| 8 | F-2, F-3, F-8 | ✅ done — rotate, rearrange, FilePicker |
+| 8 (rest) | F-4, F-5, F-6, F-7, F-9, F-10, F-11; F-1 spike | ⬜ open |
 
 **Current baseline** (re-measure before you claim a regression):
 
-- `npm run test` → **22 passing**, 2 files. `npm run typecheck` → clean.
-- `npm run lint` → **3 errors, 7 warnings** (was 7/7; the four `as any` casts are gone).
-  The 3 remaining are pre-existing and belong to **P2-18**.
-- `npm run build` → single self-contained `dist/index.html` (~2.7 MB).
+- `npm run test` → **113 passing**. `npm run typecheck` → clean under `strict`.
+- `npm run lint` → **0 errors, 1 warning** (react-refresh on button variants).
+- `npm run build` → single self-contained `dist/index.html` (~2.62 MB).
 
 ### Two corrections to this document
 
