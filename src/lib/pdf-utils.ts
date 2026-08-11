@@ -4,6 +4,7 @@
 import { PDFDocument, degrees } from '@cantoo/pdf-lib';
 import mammoth from 'mammoth';
 import html2pdf from 'html2pdf.js';
+import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
 
 /**
  * Loads a PDF, decrypting it when a password is supplied.
@@ -660,4 +661,17 @@ export async function addPageNumbers(
 
     const pdfBytes = await pdfDoc.save();
     return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+/**
+ * Extracts the images embedded in a PDF (F-7).
+ *
+ * Read-only: the source document is not modified.
+ */
+export async function extractImages(
+    file: File,
+    password?: string,
+): Promise<ExtractImagesResult> {
+    const pdfDoc = await loadPdf(file, password);
+    return extractImagesFromDocument(pdfDoc);
 }

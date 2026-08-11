@@ -9,6 +9,7 @@ import {
   RotateCw,
   ListOrdered,
   Hash,
+  Images,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { ConvertTool } from './tools/ConvertTool';
 import { RotateTool } from './tools/RotateTool';
 import { RearrangeTool } from './tools/RearrangeTool';
 import { PageNumbersTool } from './tools/PageNumbersTool';
+import { ExtractImagesTool } from './tools/ExtractImagesTool';
 
 const pdfTools = [
   {
@@ -77,6 +79,12 @@ const pdfTools = [
     description: "Stamp sequential or Bates numbers onto every page.",
     icon: Hash,
   },
+  {
+    id: "extractimages",
+    title: "Extract Images",
+    description: "Pull the embedded images out of a PDF, without changing it.",
+    icon: Images,
+  },
 ];
 
 export const GlassDashboard = () => {
@@ -128,6 +136,7 @@ export const GlassDashboard = () => {
             {activeTool === 'rotate' && <RotateTool />}
             {activeTool === 'rearrange' && <RearrangeTool />}
             {activeTool === 'pagenumbers' && <PageNumbersTool />}
+            {activeTool === 'extractimages' && <ExtractImagesTool />}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">

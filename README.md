@@ -22,6 +22,8 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
 - **Delete / Reorder Pages**: Keep pages in a custom order; omit pages to delete them.
 - **Add Page Numbers**: Stamp sequential page numbers, "page x of y", or zero-padded Bates
   numbers (with an optional prefix) for legal documents.
+- **Extract Images**: Pull the embedded images out of a PDF without modifying it; several
+  images are bundled into a zip.
 
 ## How to Use
 
