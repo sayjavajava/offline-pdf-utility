@@ -92,34 +92,50 @@ operations entirely client-side — nothing is uploaded. Substantially all logic
 | `src/App.tsx` | Router (2 routes), providers. |
 | `src/components/ui/*` | ~50 unmodified shadcn/ui primitives; most are unused. |
 
-Exports of `pdf-utils.ts`: `splitPdf`, `mergePdf`, `protectPdf` *(misnomer — it unlocks)*,
-`editPdfMetadata`, `convertImageToPdf`, `convertDocxToPdf`, `addWatermark`, plus a module-private
-`parsePageRange`.
+Exports of `pdf-utils.ts`: `splitPdf`, `mergePdf`, `removePdfPassword`, `editPdfMetadata`,
+`convertImageToPdf`, `convertDocxToPdf`, `addWatermark`, plus module-private `parsePageRange` and
+`loadPdf`.
 
-There are **no tests, no test tooling, and no CI**.
+> Everything from here down describes the codebase **as audited at `a051160`**. It is the original
+> analysis and is left intact so the reasoning behind each finding survives. Findings already
+> fixed carry an inline **✅ DONE** marker on their heading — check that before starting one. The
+> [Status block](#status--phases-1-2-and-4-are-done-start-at-phase-3) above is the authority on
+> current state.
+>
+> Since the audit: Vitest + RTL and CI now exist (22 tests), `protectPdf` was renamed
+> `removePdfPassword`, and `pdf-lib` was replaced by `@cantoo/pdf-lib`.
 
 ### Severity summary
 
-| | Count | Meaning |
-|---|---|---|
-| **P0** | 5 | Broken today and user-visible. Two of these break the app's headline promises. |
-| **P1** | 11 | Wrong behaviour, misleading errors, silent failures. |
-| **P2** | 9 | Code health, type safety, a11y, infra. |
-| **T** | 11 | Test specs to add. |
-| **F** | 11 | Additive features, ordered by value-to-risk. |
+Counts are as originally audited, with what remains open after Phases 1, 2 and 4.
 
-### The three that matter most
+| | Found | Still open | Meaning |
+|---|---|---|---|
+| **P0** | 5 | **2** (P0-4, P0-5) | Broken and user-visible. |
+| **P1** | 11 | 11 | Wrong behaviour, misleading errors, silent failures. |
+| **P2** | 9 | 6 | Code health, type safety, a11y, infra. |
+| **T** | 11 | 9 | Test specs. T-1 and T-2 (harness, fixtures) exist; T-4 is written. |
+| **F** | 11 | 11 | Additive features, ordered by value-to-risk. |
 
-1. **P0-1** — the documented offline distribution mode (open `index.html` from disk) renders a 404.
-2. **P0-2** — the "100% offline" app requests Google Fonts on every load.
-3. **P0-3** — password support is fake; the Unlock PDF tool has never worked and cannot work with
-   the current dependency.
+### The three that mattered most — all now fixed
+
+Kept for the reasoning, which the remaining work still draws on.
+
+1. **P0-1** ✅ — the documented offline distribution mode rendered a 404. The real cause ran deeper
+   than the router; see [the correction above](#two-corrections-to-this-document).
+2. **P0-2** ✅ — the "100% offline" app requested Google Fonts on every load.
+3. **P0-3** ✅ — password support was inert; Unlock PDF had never worked. It now does, verified
+   end to end in a browser.
+
+**The most severe thing still open is P0-5**: a `catch` that tests `error instanceof Error` with no
+`else`, so a non-`Error` throw shows the user nothing at all and looks like success. Phase 3 fixes
+it in the shared helper.
 
 ---
 
 ## 1. P0 — Broken today, user-visible
 
-### P0-1 · The documented offline usage renders a 404
+### P0-1 · The documented offline usage renders a 404 — ✅ DONE (`dec8572`)
 
 **Where:** `src/App.tsx:16` (`<BrowserRouter>`), `src/pages/NotFound.tsx:19`.
 
@@ -143,7 +159,7 @@ renders, and a bad hash route shows `NotFound` whose home link returns to the da
 
 ---
 
-### P0-2 · "100% offline" makes a network request on every load
+### P0-2 · "100% offline" makes a network request on every load — ✅ DONE (`dec8572`)
 
 **Where:** `index.html:10-12` and the committed `dist/index.html`; `tailwind.config.ts:86-89`.
 
@@ -181,7 +197,7 @@ distinct from the fallback). `grep -r "fonts.googleapis" .` returns nothing outs
 
 ---
 
-### P0-3 · Password support is fake — the Unlock tool can never work
+### P0-3 · Password support is fake — the Unlock tool can never work — ✅ DONE (`68f2e7e`)
 
 **Where:** `src/lib/pdf-utils.ts` lines **47, 107, 136, 213** (four identical casts);
 `protectPdf` (`:102`); `README.md:15`; password inputs in `SplitTool.tsx:66`, `EditTool.tsx:81`,
@@ -700,7 +716,7 @@ the README's setup section. Add a `packageManager` field to `package.json`.
 
 ---
 
-### P2-20 · `dist/` is committed
+### P2-20 · `dist/` is committed — ✅ DONE (`6d068f1`)
 
 **Where:** `dist/` (tracked since `a051160`); `.gitignore` ignores `/build` but not `/dist`.
 
@@ -719,7 +735,7 @@ Either way, `dist/` must be regenerated after **P0-1**/**P0-2** or deleted.
 
 ---
 
-### P2-21 · `package.json` metadata is still the scaffold's
+### P2-21 · `package.json` metadata is still the scaffold's — ✅ DONE (`56f0f58`)
 
 **Where:** `package.json:2-4`.
 
@@ -733,7 +749,7 @@ either, so the strongest constraint on reuse is invisible to anyone reading eith
 
 ---
 
-### P2-22 · No CI
+### P2-22 · No CI — ✅ DONE (`56f0f58`)
 
 **Observed:** no `.github/workflows/`. Nothing prevents a merge that fails to typecheck, lint, or
 build — the reason several findings here reached `main`.
