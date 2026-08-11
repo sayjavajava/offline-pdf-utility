@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      # The offline build is the product: one self-contained index.html that
+      # must work from file:// with no network. Keep it downloadable from every
+      # run so a failure is inspectable, not just a red check.
+      - name: Upload offline build
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-pdf-utility-html
+          path: dist/index.html
+          if-no-files-found: error
+
+  release:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Attach the offline build to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/index.html
+          body: |
+            Download `index.html` and open it in your browser. That single file
+            is the whole application — no installation, no unzipping, and no
+            network access at any point.
