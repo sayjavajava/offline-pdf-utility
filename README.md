@@ -73,14 +73,19 @@ any point — you can verify this by disconnecting before you open it.
 
 ## Technologies
 
-- **React**: A JavaScript library for building user interfaces.
-- **TypeScript**: A typed superset of JavaScript that compiles to plain JavaScript.
-- **Vite**: A fast and modern build tool for web development.
-- **pdf-lib**: A JavaScript library for creating and modifying PDF documents.
-- **mammoth.js**: A library for converting .docx files to HTML.
-- **html2pdf.js**: A library to generate PDFs from HTML.
-- **Lovable UI**: A stunning, modern UI framework.
-- **AI-Assisted Development**: Coded with the help of Cascade, an agentic AI coding assistant.
+- **React** + **TypeScript** + **Vite** — application, types, and build.
+- **@cantoo/pdf-lib** — reading and writing PDFs. A maintained fork of `pdf-lib`, used because it
+  implements the standard security handler and can therefore open password-protected documents,
+  which upstream cannot.
+- **pdf.js** — rasterising pages for the thumbnail previews and PNG export. The *legacy* build is
+  used deliberately, since the modern one relies on a JavaScript feature not yet in every browser.
+- **mammoth.js** + **html2pdf.js** — DOCX conversion. Note this path renders through a canvas, so
+  the resulting text is an image rather than selectable text.
+- **Tailwind CSS** + **shadcn/ui** (Radix) — styling and the handful of UI primitives still in use.
+- **Vitest** + **React Testing Library** — the test suite.
+
+Heavy PDF work runs in a Web Worker so the interface stays responsive; both that worker and pdf.js's
+are inlined into the build, because a file opened from disk cannot fetch sibling files.
 
 ## Setup and Development
 

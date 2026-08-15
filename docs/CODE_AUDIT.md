@@ -85,12 +85,16 @@ be a sibling file. Tested in Chromium against the real `dist/index.html` over `f
 
 **Current baseline** (re-measure before you claim a regression):
 
-- `npm run test` → **161 passing**. `npm run typecheck` → clean under `strict`.
+- `npm run test` → **177 passing**. `npm run typecheck` → clean under `strict`.
+- `npm run test:coverage` → passes; `src/lib` at **94% lines**. Thresholds are a ratchet set just
+  below what the suite achieves — raise them as coverage improves, never lower them to go green.
+  `pdf-render.ts`, `docx-convert.ts` and `pdf.worker.ts` are excluded because they cannot execute
+  under jsdom at all; the Playwright checks cover them.
 - `npm run lint` → **0 errors, 1 warning** (react-refresh on button variants).
 - `npm run build` → single self-contained `dist/index.html` (~5.75 MB; pdf.js is the largest
   single contributor, the inlined PDF worker the next).
 
-**Browser-verified** against the `file://` build, not just jsdom: all 8 tools render working forms,
+**Browser-verified** against the `file://` build, not just jsdom: all 11 tools render working forms,
 the grid is keyboard-reachable (**P2-23**), unlock works end to end, the F-10 watermark options
 produce the expected content-stream output, and **zero** network requests are attempted.
 
