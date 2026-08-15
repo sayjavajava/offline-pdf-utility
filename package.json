@@ -14,6 +14,7 @@
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "scripts": {
+    "prepare": "node scripts/generate-cmaps.mjs",
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",

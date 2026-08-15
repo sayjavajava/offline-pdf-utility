@@ -93,6 +93,13 @@ Your files are never uploaded because there is nowhere to upload them to: the
 app has no server component, and no `fetch`, `XMLHttpRequest`, `WebSocket` or
 telemetry of its own.
 
+Being offline is also why pdf.js's predefined CMap tables are compiled into the
+build (`scripts/generate-cmaps.mjs`, run automatically on install). PDFs that
+use a predefined CMap encoding — common in Chinese, Japanese and Korean
+documents — cannot be drawn without them, and a file opened from disk has no
+way to fetch them. They are generated from the installed pdfjs-dist rather than
+committed, so they cannot drift out of step with it on an upgrade.
+
 ## Technologies
 
 - **React** + **TypeScript** + **Vite** — application, types, and build.

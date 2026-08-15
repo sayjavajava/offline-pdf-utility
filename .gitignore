@@ -45,3 +45,6 @@ Thumbs.db
 
 # Build output (published as a GitHub Release artifact, not committed)
 /dist
+
+# Generated from the installed pdfjs-dist by scripts/generate-cmaps.mjs
+src/lib/pdf-cmaps.generated.ts

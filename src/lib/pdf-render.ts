@@ -12,6 +12,81 @@
 // app is distributed as a file people open in whatever browser they have.
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import PdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline';
+import { PACKED_CMAPS } from './pdf-cmaps.generated';
+
+/**
+ * Supplies pdf.js's predefined CMap tables from the bundle instead of fetching
+ * them.
+ *
+ * A PDF using a predefined CMap encoding (UniJIS-UCS2-H and similar, common in
+ * CJK documents) with a non-embedded font cannot be drawn without these. pdf.js
+ * would normally fetch them from `cMapUrl`; a page opened from disk cannot
+ * fetch anything, so previously it rendered a completely blank page and still
+ * reported success.
+ *
+ * pdf.js instantiates this class itself and calls `fetch({ kind, filename })`.
+ */
+export async function loadBundledCMap(filename: string): Promise<Uint8Array> {
+  const packed = PACKED_CMAPS[filename.replace(/\.bcmap$/, '')];
+  if (!packed) throw new Error(`No bundled CMap named "${filename}".`);
+  const bytes = Uint8Array.from(atob(packed), (c) => c.charCodeAt(0));
+  return inflate(bytes);
+}
+
+class InlineBinaryDataFactory {
+  async fetch({ kind, filename }: { kind: string; filename: string }): Promise<Uint8Array> {
+    if (kind !== 'cMapUrl') {
+      // Standard-font and wasm data are not bundled: pdf.js falls back to
+      // system fonts and to its non-wasm decoders, which render acceptably.
+      // Bundling them too would add megabytes to a file people download.
+      throw new Error(`Offline build does not bundle ${kind} data.`);
+    }
+
+    return loadBundledCMap(filename);
+  }
+}
+
+/** Inflate without Blob.stream()/Response.body, neither of which jsdom provides. */
+async function inflate(bytes: Uint8Array): Promise<Uint8Array> {
+  const source = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+  const reader = source.pipeThrough(new DecompressionStream('deflate')).getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.length;
+  }
+  return out;
+}
+
+/**
+ * Options shared by every document load.
+ *
+ * `useWorkerFetch: false` is what routes CMap loading through the main-thread
+ * factory above; left at its default the worker would try to fetch instead.
+ * `cMapUrl` must be non-empty for pdf.js to attempt a lookup at all — the value
+ * is never used as a URL (pdf.js only validates that it ends in a slash),
+ * since the factory answers entirely from memory.
+ */
+const OFFLINE_DOC_OPTIONS = {
+  useWorkerFetch: false,
+  cMapUrl: 'bundled:/',
+  cMapPacked: true,
+  BinaryDataFactory: InlineBinaryDataFactory,
+} as const;
 
 let workerReady = false;
 
@@ -59,7 +134,7 @@ export async function renderPdfPages(
   const data = new Uint8Array(await file.arrayBuffer());
   let doc;
   try {
-    doc = await getDocument({ data, password: password ?? '' }).promise;
+    doc = await getDocument({ data, password: password ?? '', ...OFFLINE_DOC_OPTIONS }).promise;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/password/i.test(message)) {
@@ -114,7 +189,7 @@ export async function renderPdfPages(
 export async function getPageCount(file: File, password?: string): Promise<number> {
   ensureWorker();
   const data = new Uint8Array(await file.arrayBuffer());
-  const doc = await getDocument({ data, password: password ?? '' }).promise;
+  const doc = await getDocument({ data, password: password ?? '', ...OFFLINE_DOC_OPTIONS }).promise;
   const count = doc.numPages;
   await doc.cleanup();
   return count;
