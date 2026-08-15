@@ -65,8 +65,22 @@ For a truly offline experience, you can run this application without any interne
 
 ### For End-Users
 
-1.  **Get the file**: Obtain `index.html` from the developer.
-2.  **Open it**: Double-click it, or open it in your browser. That's it.
+1.  **Get the file**: Download `index.html` from the
+    [Releases page](../../releases).
+2.  **Verify it** (optional, but the point of publishing a checksum): each
+    release also carries `SHA256SUMS.txt`. Confirm your copy matches before you
+    trust it —
+
+    ```bash
+    sha256sum index.html                    # Linux
+    shasum -a 256 index.html                # macOS
+    CertUtil -hashfile index.html SHA256    # Windows
+    ```
+
+    The published file is the exact artifact CI built and checked, not a later
+    rebuild, so a matching hash means you are running the code that passed the
+    offline checks below.
+3.  **Open it**: Double-click it, or open it in your browser. That's it.
 
 The application runs entirely from your machine, with no network access at
 any point — you can verify this by disconnecting before you open it.

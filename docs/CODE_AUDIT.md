@@ -26,12 +26,17 @@
 Both were attempted and both are blocked by the same property of the product: it
 ships as a single HTML file opened from disk, where the origin is `null`.
 
-**F-11 · Service worker / PWA.** `navigator.serviceWorker.register()` is rejected outright:
-*"The URL protocol of the current origin ('null') is not supported."* Service workers require an
-http(s) origin. This is not a bug to work around — the feature is meaningless for the primary
-distribution mode. It needs a second, **hosted** build target to mean anything, which is a product
-decision. (Note `isSecureContext` reports `true` on `file://`, which misleads anyone reasoning about
-this from feature detection.)
+**F-11 · Service worker / PWA — CLOSED, will not be built.** `navigator.serviceWorker.register()`
+is rejected outright here: *"The URL protocol of the current origin ('null') is not supported."*
+Service workers require an http(s) origin. (Note `isSecureContext` reports `true` on `file://`,
+which misleads anyone reasoning about this from feature detection.)
+
+It was briefly proposed that a second, *hosted* build target would unblock this and also shrink the
+download. **That proposal was withdrawn.** The product's promise is: download one file, keep it, run
+it forever, trust nobody. A hosted build asks users to load the app from a server they must trust not
+to change, every time — trading the guarantee away for a smaller download. The bundle size is not a
+cost to apologise for; it is what the guarantee weighs. Do not reopen this without changing the
+product's premise first.
 
 **F-1 · Protect PDF (add a password).** Three independent findings, in order of discovery:
 
@@ -49,7 +54,7 @@ this from feature detection.)
 
 **A viable path exists** if this is wanted: a qpdf (or similar) WASM build compiled with Emscripten's
 `wasmBinary` support, letting the binary be inlined as base64. That is a build-and-vendor task, not
-an integration task, and it would add well over a megabyte to a bundle that is already 5.75 MB.
+an integration task, and it would add well over a megabyte to a bundle that is already 6.74 MB.
 
 **CI was red and is now fixed** (`afb6aa9`). `jsdom@30` requires Node `^22.22.2` but both workflow
 jobs pinned Node 20, so `verify` failed before a single test ran — meaning the gate protecting all
@@ -85,18 +90,36 @@ be a sibling file. Tested in Chromium against the real `dist/index.html` over `f
 
 **Current baseline** (re-measure before you claim a regression):
 
-- `npm run test` → **177 passing**. `npm run typecheck` → clean under `strict`.
+- `npm run test` → **181 passing**. `npm run typecheck` → clean under `strict`.
 - `npm run test:coverage` → passes; `src/lib` at **94% lines**. Thresholds are a ratchet set just
   below what the suite achieves — raise them as coverage improves, never lower them to go green.
   `pdf-render.ts`, `docx-convert.ts` and `pdf.worker.ts` are excluded because they cannot execute
   under jsdom at all; the Playwright checks cover them.
 - `npm run lint` → **0 errors, 1 warning** (react-refresh on button variants).
-- `npm run build` → single self-contained `dist/index.html` (~5.75 MB; pdf.js is the largest
-  single contributor, the inlined PDF worker the next).
+- `npm run build` → single self-contained `dist/index.html` (~6.74 MB; pdf.js is the largest
+  single contributor, then the inlined PDF worker, then the bundled CMap tables).
+- `npm run check:offline` and `npm run check:offline:runtime` → both green, and both run in CI.
 
 **Browser-verified** against the `file://` build, not just jsdom: all 11 tools render working forms,
 the grid is keyboard-reachable (**P2-23**), unlock works end to end, the F-10 watermark options
 produce the expected content-stream output, and **zero** network requests are attempted.
+
+### The offline guarantee is now enforced, not asserted
+
+`npm run check:offline` (structure + markup) and `npm run check:offline:runtime` (loads the built
+file from disk with the network blocked, drives every tool, fails on a single request) both run in
+CI. Both were verified to **fail** when the P0-2 CDN font link was deliberately reintroduced — a
+guard never seen failing is decoration.
+
+Two consequences for anyone changing this project:
+
+- **Anything a browser could fetch must be inlined.** pdf.js's predefined CMap tables are compiled
+  in for this reason (`scripts/generate-cmaps.mjs`, run by `prepare` on install); without them a CJK
+  PDF rendered a blank page while reporting success. Standard-font and wasm data are deliberately
+  *not* bundled — pdf.js falls back acceptably and they would cost megabytes.
+- **Releases publish the artifact CI checked**, downloaded from the `verify` job, with its SHA-256 in
+  `SHA256SUMS.txt`. The release job previously rebuilt from source, which meant the file users
+  downloaded was never the one proven to make zero requests.
 
 ### A note on mocks
 
