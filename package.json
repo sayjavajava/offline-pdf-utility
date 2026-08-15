@@ -22,6 +22,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "check:offline": "node scripts/check-offline.mjs",
+    "check:offline:runtime": "node scripts/check-offline-runtime.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -62,6 +64,7 @@
     "globals": "^15.15.0",
     "jsdom": "^30.0.1",
     "lovable-tagger": "^1.1.9",
+    "playwright": "^1.62.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",

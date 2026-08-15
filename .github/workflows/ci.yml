@@ -34,9 +34,23 @@ jobs:
       - name: Build
         run: npm run build
 
-      # The offline build is the product: one self-contained index.html that
-      # must work from file:// with no network. Keep it downloadable from every
-      # run so a failure is inspectable, not just a red check.
+      # The offline guarantee is the product promise: download one file,
+      # disconnect, and nothing you open ever leaves your machine. These two
+      # checks stop that from silently regressing on a dependency bump.
+      - name: Check offline build is self-contained
+        run: npm run check:offline
+
+      - name: Install Chromium for the runtime offline check
+        run: npx playwright install --with-deps chromium
+
+      # The load-bearing check: loads the real built page from disk with the
+      # network cut, drives every tool, and fails if anything is requested.
+      # Static analysis cannot see a URL assembled at runtime.
+      - name: Verify nothing is fetched at runtime
+        run: npm run check:offline:runtime
+
+      # Keep the artifact downloadable from every run so a failure is
+      # inspectable, not just a red check.
       - name: Upload offline build
         uses: actions/upload-artifact@v4
         with:

@@ -71,6 +71,28 @@ For a truly offline experience, you can run this application without any interne
 The application runs entirely from your machine, with no network access at
 any point — you can verify this by disconnecting before you open it.
 
+### How that promise is kept
+
+"Offline" is enforced by CI on every push, not just asserted here:
+
+- `npm run check:offline` fails the build if `dist/` is anything other than one
+  self-contained page, or if that page contains a reference the browser would
+  fetch (a `<script src>`, `<link href>`, CSS `url()` or `@import` pointing off
+  the machine).
+- `npm run check:offline:runtime` loads the real built file from disk in a
+  headless browser **with every non-local request blocked**, opens all tools,
+  renders a PDF, and fails if a single request was attempted.
+
+The runtime check is the load-bearing one: static analysis cannot see a URL
+assembled at run time, nor tell a bundled library's unused network code from
+code that actually runs. Both were confirmed to fail when a CDN font link was
+deliberately reintroduced, so they are known to catch the regression they
+exist to prevent.
+
+Your files are never uploaded because there is nowhere to upload them to: the
+app has no server component, and no `fetch`, `XMLHttpRequest`, `WebSocket` or
+telemetry of its own.
+
 ## Technologies
 
 - **React** + **TypeScript** + **Vite** — application, types, and build.
