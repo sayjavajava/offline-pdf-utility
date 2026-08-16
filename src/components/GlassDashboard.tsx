@@ -1,22 +1,32 @@
 import { useState } from 'react';
 import { 
-  FileText, 
   Scissors, 
   Copy, 
   Edit3, 
   RefreshCw, 
-  Minimize, 
-  Lock,
   Shield,
-  Sparkles
+  Sparkles,
+  RotateCw,
+  ListOrdered,
+  Hash,
+  Images,
+  FileImage,
+  FileType,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
+import { Button } from "@/components/ui/button";
 import { SplitTool } from './tools/SplitTool';
 import { MergeTool } from './tools/MergeTool';
 import { UnlockTool } from './tools/UnlockTool';
 import { EditTool } from './tools/EditTool';
 import { AddWatermarkTool } from './tools/AddWatermarkTool';
 import { ConvertTool } from './tools/ConvertTool';
+import { RotateTool } from './tools/RotateTool';
+import { RearrangeTool } from './tools/RearrangeTool';
+import { PageNumbersTool } from './tools/PageNumbersTool';
+import { ExtractImagesTool } from './tools/ExtractImagesTool';
+import { PdfToImagesTool } from './tools/PdfToImagesTool';
+import { ExtractTextTool } from './tools/ExtractTextTool';
 
 const pdfTools = [
   {
@@ -55,6 +65,42 @@ const pdfTools = [
     description: "Apply a text watermark to every page of your PDF.",
     icon: Sparkles,
   },
+  {
+    id: "rotate",
+    title: "Rotate Pages",
+    description: "Rotate selected pages by 90°, 180°, or 270°.",
+    icon: RotateCw,
+  },
+  {
+    id: "rearrange",
+    title: "Delete / Reorder",
+    description: "Keep pages in a custom order; omit pages to delete them.",
+    icon: ListOrdered,
+  },
+  {
+    id: "pagenumbers",
+    title: "Add Page Numbers",
+    description: "Stamp sequential or Bates numbers onto every page.",
+    icon: Hash,
+  },
+  {
+    id: "extractimages",
+    title: "Extract Images",
+    description: "Pull the embedded images out of a PDF, without changing it.",
+    icon: Images,
+  },
+  {
+    id: "pdftoimages",
+    title: "PDF to Images",
+    description: "Render pages to PNG, with a thumbnail preview.",
+    icon: FileImage,
+  },
+  {
+    id: "extracttext",
+    title: "Extract Text",
+    description: "Pull the text out of a PDF as a plain text file.",
+    icon: FileType,
+  },
 ];
 
 export const GlassDashboard = () => {
@@ -86,32 +132,45 @@ export const GlassDashboard = () => {
           </p>
         </div>
 
-        {/* Tools grid with staggered animations */}
-              {activeTool ? (
-        <div>
-          <button onClick={() => setActiveTool(null)} className="text-white mb-4">Back to Tools</button>
-          {activeTool === 'split' && <SplitTool />}
-          {activeTool === 'merge' && <MergeTool />}
-          {activeTool === 'unlock' && <UnlockTool />}
-          {activeTool === 'edit' && <EditTool />}
-          {activeTool === 'convert' && <ConvertTool />}
-          {activeTool === 'watermark' && <AddWatermarkTool />}
-          {/* Other tools will be rendered here */}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">
-          {pdfTools.map((tool, index) => (
-            <GlassPDFCard
-              key={tool.id}
-              title={tool.title}
-              description={tool.description}
-              icon={tool.icon}
-              onClick={() => handleToolClick(tool.id)}
-              delay={index * 100}
-            />
-          ))}
-        </div>
-      )}
+        {activeTool ? (
+          <div>
+            <Button
+              type="button"
+              variant="ghost"
+              className="mb-4"
+              onClick={() => setActiveTool(null)}
+              aria-label="Back to Tools"
+            >
+              Back to Tools
+            </Button>
+            {activeTool === 'split' && <SplitTool />}
+            {activeTool === 'merge' && <MergeTool />}
+            {activeTool === 'unlock' && <UnlockTool />}
+            {activeTool === 'edit' && <EditTool />}
+            {activeTool === 'convert' && <ConvertTool />}
+            {activeTool === 'watermark' && <AddWatermarkTool />}
+            {activeTool === 'rotate' && <RotateTool />}
+            {activeTool === 'rearrange' && <RearrangeTool />}
+            {activeTool === 'pagenumbers' && <PageNumbersTool />}
+            {activeTool === 'extractimages' && <ExtractImagesTool />}
+            {activeTool === 'pdftoimages' && <PdfToImagesTool />}
+            {activeTool === 'extracttext' && <ExtractTextTool />}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">
+            {pdfTools.map((tool, index) => (
+              <GlassPDFCard
+                key={tool.id}
+                title={tool.title}
+                description={tool.description}
+                icon={tool.icon}
+                onClick={() => handleToolClick(tool.id)}
+                delay={index * 100}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Security badge */}
         <div className="text-center">
           <div className="inline-flex items-center space-x-3 bg-glass-bg backdrop-blur-sm border border-glass-border rounded-2xl px-6 py-4 shadow-glass">

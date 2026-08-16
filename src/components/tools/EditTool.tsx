@@ -1,22 +1,20 @@
 import { useState } from 'react';
 import { editPdfMetadata } from '@/lib/pdf-utils';
+import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
+import { assertPdfFile, largeFileWarning } from '@/lib/file-validation';
+import { FilePicker } from '@/components/FilePicker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 
 export const EditTool = () => {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [password, setPassword] = useState('');
   const [metadata, setMetadata] = useState({ title: '', author: '', subject: '', keywords: '' });
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFile(e.target.files[0]);
-    }
-  };
+  const file = files[0] ?? null;
 
   const handleMetadataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -32,32 +30,32 @@ export const EditTool = () => {
     setIsLoading(true);
     try {
       const blob = await editPdfMetadata(file, metadata, password);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${file.name.replace('.pdf', '')}_edited.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, derivedName(file.name, '_edited'));
       toast({ title: 'Success!', description: 'The PDF metadata has been updated.' });
     } catch (error) {
-      if (error instanceof Error) {
-        toast({ title: 'Error editing PDF', description: error.message, variant: 'destructive' });
-      }
+      reportToolError(toast, 'Error editing PDF', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="space-y-4 text-white">
+    <div className="space-y-4 text-foreground">
       <h2 className="text-2xl font-bold">Edit PDF Metadata</h2>
-      <div>
-        <Label htmlFor="file">PDF File</Label>
-        <Input id="file" type="file" onChange={handleFileChange} accept=".pdf" />
-        {file && <p className="text-sm text-gray-400 mt-2">Selected file: {file.name}</p>}
-      </div>
+      <FilePicker
+        files={files}
+        onChange={(next) => {
+          setFiles(next);
+          if (next[0]) {
+            const warning = largeFileWarning(next[0]);
+            if (warning) toast({ title: 'Large file', description: warning });
+          }
+        }}
+        accept=".pdf"
+        label="PDF File"
+        onValidate={assertPdfFile}
+        onReject={(error) => reportToolError(toast, 'Invalid file', error)}
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="title">Title</Label>

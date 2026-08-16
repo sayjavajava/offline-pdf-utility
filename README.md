@@ -12,10 +12,22 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
 - **Modern UI**: A beautiful and intuitive glassmorphism interface built with the Lovable UI framework.
 - **Split PDF**: Extract specific pages or page ranges from a PDF.
 - **Merge PDF**: Combine multiple PDF documents into a single file.
-- **Unlock PDF**: Remove password protection from encrypted PDF files.
+- **Unlock PDF**: Remove password protection from an encrypted PDF, given its
+  password. Supports both RC4 and AES encryption. Note that the reverse —
+  *adding* a password to a PDF — is not currently supported.
 - **Edit Metadata**: Modify your PDF's title, author, subject, and keywords.
 - **Convert to PDF**: Convert JPEG, PNG, or DOCX files to PDF format.
 - **Add Watermark**: Apply a text watermark to every page of your PDF.
+- **Rotate Pages**: Rotate selected pages (or the whole document) by 90°, 180°, or 270°.
+- **Delete / Reorder Pages**: Keep pages in a custom order; omit pages to delete them.
+- **Add Page Numbers**: Stamp sequential page numbers, "page x of y", or zero-padded Bates
+  numbers (with an optional prefix) for legal documents.
+- **Extract Images**: Pull the embedded images out of a PDF without modifying it; several
+  images are bundled into a zip.
+- **PDF to Images**: Render pages to PNG at a chosen scale, with a thumbnail preview so you
+  can see the pages before choosing a range.
+- **Extract Text**: Pull the text out of a PDF as a plain text file. Scanned documents have no
+  text layer and will come back empty — reading those needs OCR, which this tool does not do.
 
 ## How to Use
 
@@ -43,38 +55,97 @@ For a truly offline experience, you can run this application without any interne
     npm run build
     ```
 
-2.  **Package the files**:
-    This will create a `dist` folder containing all the necessary files. Compress this `dist` folder into a `.zip` file (e.g., `offline-pdf-utility.zip`).
+2.  **Ship `dist/index.html`**:
+    The build produces a single self-contained `dist/index.html` with all
+    JavaScript, CSS, and fonts inlined. That one file *is* the application —
+    there is nothing else to package, and no `.zip` is needed.
+
+    This is deliberate. Browsers treat a page opened from disk as having a
+    `null` origin and fetch module scripts and fonts under CORS rules, so a
+    conventional multi-file build silently refuses to start from `file://`.
+    Inlining every asset is what makes opening the file directly work at all.
 
 ### For End-Users
 
-1.  **Download and Unzip**: Get the `.zip` file from the developer and unzip it on your computer.
-2.  **Open the App**: Navigate into the unzipped folder and open the `index.html` file directly in your web browser.
+1.  **Get the file**: Download `index.html` from the
+    [Releases page](../../releases).
+2.  **Verify it** (optional, but the point of publishing a checksum): each
+    release also carries `SHA256SUMS.txt`. Confirm your copy matches before you
+    trust it —
 
-The application will now be running completely from your local machine.
+    ```bash
+    sha256sum index.html                    # Linux
+    shasum -a 256 index.html                # macOS
+    CertUtil -hashfile index.html SHA256    # Windows
+    ```
+
+    The published file is the exact artifact CI built and checked, not a later
+    rebuild, so a matching hash means you are running the code that passed the
+    offline checks below.
+3.  **Open it**: Double-click it, or open it in your browser. That's it.
+
+The application runs entirely from your machine, with no network access at
+any point — you can verify this by disconnecting before you open it.
+
+### How that promise is kept
+
+"Offline" is enforced by CI on every push, not just asserted here:
+
+- `npm run check:offline` fails the build if `dist/` is anything other than one
+  self-contained page, or if that page contains a reference the browser would
+  fetch (a `<script src>`, `<link href>`, CSS `url()` or `@import` pointing off
+  the machine).
+- `npm run check:offline:runtime` loads the real built file from disk in a
+  headless browser **with every non-local request blocked**, opens all tools,
+  renders a PDF, and fails if a single request was attempted.
+
+The runtime check is the load-bearing one: static analysis cannot see a URL
+assembled at run time, nor tell a bundled library's unused network code from
+code that actually runs. Both were confirmed to fail when a CDN font link was
+deliberately reintroduced, so they are known to catch the regression they
+exist to prevent.
+
+Your files are never uploaded because there is nowhere to upload them to: the
+app has no server component, and no `fetch`, `XMLHttpRequest`, `WebSocket` or
+telemetry of its own.
+
+Being offline is also why pdf.js's predefined CMap tables are compiled into the
+build (`scripts/generate-cmaps.mjs`, run automatically on install). PDFs that
+use a predefined CMap encoding — common in Chinese, Japanese and Korean
+documents — cannot be drawn without them, and a file opened from disk has no
+way to fetch them. They are generated from the installed pdfjs-dist rather than
+committed, so they cannot drift out of step with it on an upgrade.
 
 ## Technologies
 
-- **React**: A JavaScript library for building user interfaces.
-- **TypeScript**: A typed superset of JavaScript that compiles to plain JavaScript.
-- **Vite**: A fast and modern build tool for web development.
-- **pdf-lib**: A JavaScript library for creating and modifying PDF documents.
-- **mammoth.js**: A library for converting .docx files to HTML.
-- **html2pdf.js**: A library to generate PDFs from HTML.
-- **Lovable UI**: A stunning, modern UI framework.
-- **AI-Assisted Development**: Coded with the help of Cascade, an agentic AI coding assistant.
+- **React** + **TypeScript** + **Vite** — application, types, and build.
+- **@cantoo/pdf-lib** — reading and writing PDFs. A maintained fork of `pdf-lib`, used because it
+  implements the standard security handler and can therefore open password-protected documents,
+  which upstream cannot.
+- **pdf.js** — rasterising pages for the thumbnail previews and PNG export. The *legacy* build is
+  used deliberately, since the modern one relies on a JavaScript feature not yet in every browser.
+- **mammoth.js** + **html2pdf.js** — DOCX conversion. Note this path renders through a canvas, so
+  the resulting text is an image rather than selectable text.
+- **Tailwind CSS** + **shadcn/ui** (Radix) — styling and the handful of UI primitives still in use.
+- **Vitest** + **React Testing Library** — the test suite.
+
+Heavy PDF work runs in a Web Worker so the interface stays responsive; both that worker and pdf.js's
+are inlined into the build, because a file opened from disk cannot fetch sibling files.
 
 ## Setup and Development
 
+This project uses **npm** (see `packageManager` in `package.json`). Do not commit
+other lockfiles.
+
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/offline-pdf-utility.git
+   git clone https://github.com/sayjavajava/offline-pdf-utility.git
    cd offline-pdf-utility
    ```
 
 2. **Install dependencies:**
    ```bash
-   npm install
+   npm ci
    ```
 
 3. **Run the development server:**
@@ -84,6 +155,10 @@ The application will now be running completely from your local machine.
 
 4. **Open the application:**
    Open your browser and navigate to the local URL provided by Vite (usually `http://localhost:5173`).
+
+## License
+
+GPL-3.0-or-later. See [`LICENSE`](LICENSE).
 
 ## Contribution Guidelines
 

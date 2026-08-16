@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 export const FloatingOrbs = () => {
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden">
