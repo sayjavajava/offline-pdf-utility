@@ -26,6 +26,8 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
   images are bundled into a zip.
 - **PDF to Images**: Render pages to PNG at a chosen scale, with a thumbnail preview so you
   can see the pages before choosing a range.
+- **Extract Text**: Pull the text out of a PDF as a plain text file. Scanned documents have no
+  text layer and will come back empty — reading those needs OCR, which this tool does not do.
 
 ## How to Use
 

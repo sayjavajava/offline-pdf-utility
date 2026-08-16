@@ -11,6 +11,7 @@ import {
   Hash,
   Images,
   FileImage,
+  FileType,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import { RearrangeTool } from './tools/RearrangeTool';
 import { PageNumbersTool } from './tools/PageNumbersTool';
 import { ExtractImagesTool } from './tools/ExtractImagesTool';
 import { PdfToImagesTool } from './tools/PdfToImagesTool';
+import { ExtractTextTool } from './tools/ExtractTextTool';
 
 const pdfTools = [
   {
@@ -93,6 +95,12 @@ const pdfTools = [
     description: "Render pages to PNG, with a thumbnail preview.",
     icon: FileImage,
   },
+  {
+    id: "extracttext",
+    title: "Extract Text",
+    description: "Pull the text out of a PDF as a plain text file.",
+    icon: FileType,
+  },
 ];
 
 export const GlassDashboard = () => {
@@ -146,6 +154,7 @@ export const GlassDashboard = () => {
             {activeTool === 'pagenumbers' && <PageNumbersTool />}
             {activeTool === 'extractimages' && <ExtractImagesTool />}
             {activeTool === 'pdftoimages' && <PdfToImagesTool />}
+            {activeTool === 'extracttext' && <ExtractTextTool />}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">

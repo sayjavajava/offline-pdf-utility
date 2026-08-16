@@ -17,7 +17,8 @@
 | 6 | P1-11, P1-13, P1-14, P1-16, P2-23, T-10, T-11 | ✅ done — `39e961f` |
 | 7 | P2-17, P2-19, P2-18, P2-25 | ✅ done — `d80057a`, `6a162f7`, `b05c5b9` |
 | 8 | F-2, F-3, F-8, F-10 | ✅ done — `f3b658f`, `4fed11c`, `41a5290` |
-| 8 | F-6, F-7, F-9, F-4, F-5 | ✅ done — `121a5a1`, `8d50856`, `f76784e`, `7af39f0` |
+| 8 | F-6, F-7 (images), F-9, F-4, F-5 | ✅ done — `121a5a1`, `8d50856`, `f76784e`, `7af39f0` |
+| 8 | F-7 (text) | ✅ done — see the Extract Text tool |
 | — | P2-24 | ✅ done — `f76784e` (operations run in a worker) |
 | 8 | **F-1, F-11** | ⛔ **blocked — measured, not deferred. See below.** |
 
@@ -234,7 +235,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 11 | **0** | Wrong behaviour, misleading errors, silent failures. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 11 | **8** (F-1, F-4–F-7, F-9–F-11) | Additive features. F-2, F-3, F-8 done. |
+| **F** | 11 | **1** (F-1) | Additive features. F-2–F-10 done; F-11 closed as incompatible. |
 
 ### The three that mattered most — all now fixed
 
@@ -1071,8 +1072,14 @@ dropping so damaging.
 **F-6 · Page numbers / Bates stamping** — same drawing path as the watermark; reuse the font handling
 and text-encoding validation from **P0-4** rather than duplicating it.
 
-**F-7 · Extract embedded images / extract text** — read-only, so no output-fidelity risk. Text
-extraction needs `pdfjs-dist` (pairs with F-4/F-5); image extraction is pure pdf-lib.
+**F-7 · Extract embedded images / extract text** — ✅ DONE, both halves. Image extraction
+(`8d50856`) is pure pdf-lib; text extraction came later, once `pdfjs-dist` was already bundled for
+F-4/F-5.
+
+> **This item was briefly marked done when only the image half existed.** The status table said
+> ✅ while `getTextContent` appeared nowhere in the source. A feature wrongly marked complete is
+> worse than one left open, because nobody goes looking for it. When splitting a finding across two
+> deliverables, track them separately.
 
 **F-8 · Drag-and-drop + a reorderable file list** — ✅ DONE (`4fed11c`) — properly fixes **P1-13** and applies to every
 tool. Note that drag-drop bypasses `accept=`, so it depends on **P1-11**'s validation landing first.

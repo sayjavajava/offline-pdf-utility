@@ -105,6 +105,79 @@ export type RenderedPage = {
   height: number;
 };
 
+export type ExtractedPageText = {
+  pageNumber: number;
+  text: string;
+};
+
+/** Open a document with the offline options, mapping a password failure. */
+async function loadDocument(file: File, password?: string) {
+  ensureWorker();
+  const data = new Uint8Array(await file.arrayBuffer());
+  try {
+    return await getDocument({ data, password: password ?? '', ...OFFLINE_DOC_OPTIONS }).promise;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/password/i.test(message)) {
+      throw new Error('This PDF is password protected. Enter its password to continue.');
+    }
+    throw error;
+  }
+}
+
+/** Resolve a 1-based page selection against the document, or every page. */
+function resolveTargets(requested: number[] | undefined, pageCount: number): number[] {
+  const targets = requested?.length
+    ? requested
+    : Array.from({ length: pageCount }, (_, i) => i + 1);
+  for (const pageNumber of targets) {
+    if (pageNumber < 1 || pageNumber > pageCount) {
+      throw new Error(`Page ${pageNumber} is outside this ${pageCount}-page document.`);
+    }
+  }
+  return targets;
+}
+
+/**
+ * Pull the text out of a PDF, page by page (F-7).
+ *
+ * Read-only, and text-layer only: a scanned document carries pictures of words
+ * with no text layer, so it yields nothing here. Callers must say so rather
+ * than hand back an empty file — see the tool, which checks for exactly that.
+ */
+export async function extractPdfText(
+  file: File,
+  { pageNumbers, password, onProgress }: {
+    pageNumbers?: number[];
+    password?: string;
+    onProgress?: (done: number, total: number) => void;
+  } = {},
+): Promise<ExtractedPageText[]> {
+  const doc = await loadDocument(file, password);
+  const targets = resolveTargets(pageNumbers, doc.numPages);
+
+  const out: ExtractedPageText[] = [];
+  for (const [index, pageNumber] of targets.entries()) {
+    const page = await doc.getPage(pageNumber);
+    const content = await page.getTextContent();
+
+    // pdf.js emits positioned runs, not lines. `hasEOL` is what marks the end
+    // of a visual line; joining without it collapses the page into one string.
+    const text = content.items
+      .map((item) => ('str' in item ? item.str + (item.hasEOL ? '\n' : '') : ''))
+      .join('')
+      .replace(/[ \t]+\n/g, '\n')
+      .trimEnd();
+
+    out.push({ pageNumber, text });
+    page.cleanup();
+    onProgress?.(index + 1, targets.length);
+  }
+
+  await doc.cleanup();
+  return out;
+}
+
 async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('Could not read the rendered page from the canvas.');
@@ -129,29 +202,11 @@ export async function renderPdfPages(
   if (!Number.isFinite(scale) || scale <= 0 || scale > 8) {
     throw new Error('Scale must be between 0 and 8.');
   }
-  ensureWorker();
-
-  const data = new Uint8Array(await file.arrayBuffer());
-  let doc;
-  try {
-    doc = await getDocument({ data, password: password ?? '', ...OFFLINE_DOC_OPTIONS }).promise;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (/password/i.test(message)) {
-      throw new Error('This PDF is password protected. Enter its password to continue.');
-    }
-    throw error;
-  }
-
-  const targets = pageNumbers?.length
-    ? pageNumbers
-    : Array.from({ length: doc.numPages }, (_, i) => i + 1);
+  const doc = await loadDocument(file, password);
+  const targets = resolveTargets(pageNumbers, doc.numPages);
 
   const out: RenderedPage[] = [];
   for (const [index, pageNumber] of targets.entries()) {
-    if (pageNumber < 1 || pageNumber > doc.numPages) {
-      throw new Error(`Page ${pageNumber} is outside this ${doc.numPages}-page document.`);
-    }
     const page = await doc.getPage(pageNumber);
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
@@ -187,9 +242,7 @@ export async function renderPdfPages(
 
 /** Page count without rendering anything — cheap enough for a preview header. */
 export async function getPageCount(file: File, password?: string): Promise<number> {
-  ensureWorker();
-  const data = new Uint8Array(await file.arrayBuffer());
-  const doc = await getDocument({ data, password: password ?? '', ...OFFLINE_DOC_OPTIONS }).promise;
+  const doc = await loadDocument(file, password);
   const count = doc.numPages;
   await doc.cleanup();
   return count;

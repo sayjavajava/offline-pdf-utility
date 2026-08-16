@@ -52,8 +52,10 @@ vi.mock("@/lib/pdf-utils", async () => {
 // the component contract can be tested; the real rendering is covered by the
 // browser checks.
 const renderPdfPages = vi.fn();
+const extractPdfText = vi.fn();
 vi.mock("@/lib/pdf-render", () => ({
   renderPdfPages: (...args: unknown[]) => renderPdfPages(...args),
+  extractPdfText: (...args: unknown[]) => extractPdfText(...args),
   getPageCount: vi.fn(),
 }));
 
@@ -62,6 +64,7 @@ import { RearrangeTool } from "./RearrangeTool";
 import { PageNumbersTool } from "./PageNumbersTool";
 import { ExtractImagesTool } from "./ExtractImagesTool";
 import { PdfToImagesTool } from "./PdfToImagesTool";
+import { ExtractTextTool } from "./ExtractTextTool";
 
 beforeEach(() => {
   toastSpy.mockClear();
@@ -72,6 +75,7 @@ beforeEach(() => {
   addPageNumbers.mockReset();
   extractImages.mockReset();
   renderPdfPages.mockReset();
+  extractPdfText.mockReset();
   // Previews fire on mount; default to "nothing rendered" unless a case says otherwise.
   renderPdfPages.mockResolvedValue([]);
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -282,5 +286,93 @@ describe("PdfToImagesTool (T-10 / F-4, F-5)", () => {
     await user.click(screen.getByRole("button", { name: /export pages/i }));
     await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
     expect(String(downloadBlob.mock.calls[0][1])).toMatch(/\.zip$/);
+  });
+});
+
+describe("ExtractTextTool (T-10 / F-7 text)", () => {
+  it("guards when no file is selected", async () => {
+    const user = userEvent.setup();
+    render(<ExtractTextTool />);
+    await user.click(screen.getByRole("button", { name: /extract text/i }));
+    expect(extractPdfText).not.toHaveBeenCalled();
+  });
+
+  it("says a scanned PDF has no text layer instead of downloading an empty file", async () => {
+    const user = userEvent.setup();
+    // The failure this tool must not repeat: handing back a blank file that
+    // looks exactly like success.
+    extractPdfText.mockResolvedValue([
+      { pageNumber: 1, text: "" },
+      { pageNumber: 2, text: "   " },
+    ]);
+    render(<ExtractTextTool />);
+    await upload(pdfInput(), await makePdfFile(2));
+    await user.click(screen.getByRole("button", { name: /extract text/i }));
+
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "No text found", variant: "destructive" }),
+      ),
+    );
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+
+  it("downloads a .txt with page markers by default", async () => {
+    const user = userEvent.setup();
+    extractPdfText.mockResolvedValue([
+      { pageNumber: 1, text: "first page" },
+      { pageNumber: 2, text: "second page" },
+    ]);
+    render(<ExtractTextTool />);
+    await upload(pdfInput(), await makePdfFile(2));
+    await user.click(screen.getByRole("button", { name: /extract text/i }));
+
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
+    expect(String(downloadBlob.mock.calls[0][1])).toMatch(/_text\.txt$/);
+    const body = await (downloadBlob.mock.calls[0][0] as Blob).text();
+    expect(body).toContain("--- Page 1 ---");
+    expect(body).toContain("first page");
+    expect(body).toContain("--- Page 2 ---");
+  });
+
+  it("omits the markers when asked to", async () => {
+    const user = userEvent.setup();
+    extractPdfText.mockResolvedValue([{ pageNumber: 1, text: "just words" }]);
+    render(<ExtractTextTool />);
+    await upload(pdfInput(), await makePdfFile(1));
+    await user.click(screen.getByLabelText(/mark where each page starts/i));
+    await user.click(screen.getByRole("button", { name: /extract text/i }));
+
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
+    const body = await (downloadBlob.mock.calls[0][0] as Blob).text();
+    expect(body).not.toContain("--- Page");
+    expect(body).toContain("just words");
+  });
+
+  it("mentions pages that had no text, when only some are empty", async () => {
+    const user = userEvent.setup();
+    extractPdfText.mockResolvedValue([
+      { pageNumber: 1, text: "words here" },
+      { pageNumber: 2, text: "" },
+    ]);
+    render(<ExtractTextTool />);
+    await upload(pdfInput(), await makePdfFile(2));
+    await user.click(screen.getByRole("button", { name: /extract text/i }));
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ description: expect.stringContaining("1 had no text layer") }),
+      ),
+    );
+  });
+
+  it("still toasts on a non-Error rejection (P0-5)", async () => {
+    const user = userEvent.setup();
+    extractPdfText.mockRejectedValue("boom");
+    render(<ExtractTextTool />);
+    await upload(pdfInput(), await makePdfFile(1));
+    await user.click(screen.getByRole("button", { name: /extract text/i }));
+    await waitFor(() =>
+      expect(reportToolError).toHaveBeenCalledWith(toastSpy, "Error extracting text", "boom"),
+    );
   });
 });
