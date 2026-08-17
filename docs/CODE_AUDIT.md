@@ -5,7 +5,7 @@
 
 ---
 
-## Status — COMPLETE. Every actionable finding is implemented.
+## Status — every originally-scoped finding is implemented. One gap found after release: **F-12**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -21,6 +21,7 @@
 | 8 | F-7 (text) | ✅ done — see the Extract Text tool |
 | — | P2-24 | ✅ done — `f76784e` (operations run in a worker) |
 | 8 | **F-1, F-11** | ⛔ **blocked — measured, not deferred. See below.** |
+| 8 | **F-12** | ⬜ **open — real work, scoped below.** Found post-release: `v0.1.0` testers correctly identified that DOCX conversion producing an unsearchable image undermines the feature's actual purpose, not just a footnote-able limitation. |
 
 ### The two features that cannot be built as specified
 
@@ -235,7 +236,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 11 | **0** | Wrong behaviour, misleading errors, silent failures. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 11 | **1** (F-1) | Additive features. F-2–F-10 done; F-11 closed as incompatible. |
+| **F** | 12 | **2** (F-1, F-12) | Additive features. F-2–F-10 done; F-11 closed as incompatible; F-12 added post-release. |
 
 ### The three that mattered most — all now fixed
 
@@ -1098,6 +1099,50 @@ register from `file://` (measured — see the worker findings in the status bloc
 primary distribution mode. This needs a second hosted build target to mean anything, which is a
 product decision. Original rationale follows: makes a *hosted* deployment work offline after first load, and
 gives installability. Complements **P0-2**, which fixes the `file://` case.
+
+**F-12 · Real, text-based DOCX→PDF conversion — open, real work, not a quick fix.** Raised by a
+tester on `v0.1.0`: `convertDocxToPdf` (`src/lib/pdf-utils.ts`) still rasterizes, exactly as **P1-16**
+described and only partially mitigated. The pipeline is `mammoth` → HTML → `html2pdf.js`
+(`html2canvas` + `jsPDF`), which embeds a **picture** of the page as the PDF content. P1-16 fixed the
+symptoms — margins, page sizing, a UI warning — but the fundamental gap remains: **no selectable,
+searchable, or copyable text**, which is the actual reason most people convert a document to PDF
+(resumes, reports, anything meant to be searched, copied, or read by a screen reader). A warning label
+does not close that gap; it only discloses it.
+
+**Why this is a real project, not a config change:** producing genuine text output means laying out
+mammoth's HTML as real PDF text objects — line wrapping against actual font metrics, page breaks that
+don't split a paragraph mid-word, headings, bold/italic runs, lists, and at minimum simple tables.
+That's a layout engine, not a rendering tweak.
+
+**Candidate approaches — none chosen yet, each needs verification before commitment** (same discipline
+as **F-1**: this document previously recommended a library without checking it could do the job, and
+that cost a full spike to discover):
+
+1. **Hand-rolled layout on `@cantoo/pdf-lib`.** No new dependency; consistent with how every other
+   tool in this app already draws text (`addWatermark`, `addPageNumbers`) and already owns the
+   font-encoding validation (`assertEncodable`) this would need too. Most implementation work, but the
+   lowest-risk failure mode: a layout bug produces visually-wrong-but-safe output, not a false
+   guarantee (contrast with why hand-rolled encryption was rejected for F-1). **Preferred default**
+   unless the spike finds a clearly better option.
+2. **`pdfmake`.** Purpose-built for structured-content → real-text PDF, with wrapping, lists, and
+   tables handled for you, and it embeds fonts rather than fetching them (verify this explicitly — it
+   is the make-or-break property for this app). Needs a translation layer from mammoth's HTML to
+   pdfmake's `docDefinition` JSON; whether an existing one is reliable enough to depend on, or whether
+   to write a narrow one covering only what mammoth actually emits, is exactly what the spike should
+   determine. Adds a dependency and font-embedding bundle weight — measure it.
+3. Anything else the spike turns up. Do not add a dependency to this offline, single-file build
+   without doing what **F-1**'s spike did: read the source, confirm no network fetch is reachable from
+   the code path used, and measure the actual bundle cost — not the README's claim.
+
+**Scope the spike should answer before implementation starts:** what subset of mammoth's HTML output
+(headings, bold/italic, lists, tables, images, hyperlinks) is worth supporting for v1 — mammoth's
+`messages` array (currently discarded, see P1-16) is a ready-made signal for what it couldn't map
+cleanly, which is a reasonable place to draw the v1 line.
+
+**Accept:** a DOCX with a heading, a bold/italic run, and a list converts to a PDF where that text is
+genuinely selectable and found by Ctrl+F — verified by reading it back with `pdfjs-dist`'s
+`getTextContent()` (the same check **F-7**'s text extraction already uses), not just by eyeballing the
+render.
 
 ---
 
