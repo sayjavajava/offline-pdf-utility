@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open post-release items: **F-12**. Blocked: **F-1, F-11**.
+## Status — every originally-scoped finding is implemented. Open post-release items: **F-12, P1-17**. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -20,14 +20,13 @@
 | 8 | F-6, F-7 (images), F-9, F-4, F-5 | ✅ done — `121a5a1`, `8d50856`, `f76784e`, `7af39f0` |
 | 8 | F-7 (text) | ✅ done — see the Extract Text tool |
 | — | P2-24 | ✅ done — `f76784e` (operations run in a worker) |
-| 8 | **F-1, F-11** | ⛔ **blocked — measured, not deferred. See below.** |
+| 8 | **F-11** | ⛔ **closed, will not be built — a deliberate product decision. See below.** |
+| 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
 | 8 | **F-12** | ⬜ **open — real work, scoped below.** Found post-release: `v0.1.0` testers correctly identified that DOCX conversion producing an unsearchable image undermines the feature's actual purpose, not just a footnote-able limitation. |
 | 8 | F-13 | ✅ done — `dd92468` |
+| — | **P1-17** | ⬜ **open — discovered verifying F-1's round trip, predates it. See below.** |
 
-### The two features that cannot be built as specified
-
-Both were attempted and both are blocked by the same property of the product: it
-ships as a single HTML file opened from disk, where the origin is `null`.
+### The one feature that cannot be built as specified
 
 **F-11 · Service worker / PWA — CLOSED, will not be built.** `navigator.serviceWorker.register()`
 is rejected outright here: *"The URL protocol of the current origin ('null') is not supported."*
@@ -41,31 +40,37 @@ to change, every time — trading the guarantee away for a smaller download. The
 cost to apologise for; it is what the guarantee weighs. Do not reopen this without changing the
 product's premise first.
 
-**F-1 · Protect PDF (add a password).** Three independent findings, in order of discovery:
+**F-1 · Protect PDF (add a password) — ✅ DONE (`60b9e85`), reversing this document's own "blocked"
+verdict.** This was previously marked blocked on the claim that `@jspawn/qpdf-wasm`'s loader "does
+not support `wasmBinary`" and therefore could not be inlined into a single-file build. That claim was
+too narrow: the loader does not read a `wasmBinary` config field, but it **does** honor a `locateFile`
+hook, and `fetch()` resolves a `data:` URI locally rather than over the network. Pointing `locateFile`
+at a base64 data URI built from the bundled binary loads and runs the module with **zero network
+requests** — verified directly against the real `file://` build with every non-local request blocked,
+before it was relied on for anything. **Lesson repeated from P0-1: verify the actual hook surface in
+a browser, don't stop at the first API that doesn't exist.**
 
-1. Neither `pdf-lib` nor `@cantoo/pdf-lib` can *write* encryption — `SaveOptions` has no password
-   fields. Confirmed from source.
-2. `@jspawn/qpdf-wasm@0.0.2`, the package this document proposed, **does not support `wasmBinary`**
-   — the string appears nowhere in its loader. It can only `fetch` its 1.22 MB `.wasm` as a sibling
-   file. That cannot be inlined into the single-file build, and fetching a sibling from a `null`
-   origin is blocked — the same failure that broke **P0-1**. The package also ships no API surface
-   beyond the CLI and no usage docs (its README points at a `tests` directory it does not include).
-3. Hand-rolling PDF encryption on top of pdf-lib was considered and rejected. Writing a correct
-   AES-256 (R6) security handler means deriving `/O`, `/U`, `/OE`, `/UE` and `/Perms` and encrypting
-   every string and stream. Getting it subtly wrong produces a file the user *believes* is protected
-   — worse than not offering the feature.
+What shipped: the wasm binary is bundled the same way the pdf.js CMap tables are (generated, not
+committed, deflated before base64 — ~1.22 MB → ~0.41 MB packed) via `scripts/generate-qpdf-wasm.mjs`,
+and the qpdf CLI is driven through its virtual filesystem (`FS.writeFile` / `callMain` / `FS.readFile`
+— it exposes no library API, only the CLI). It only offers AES-256: qpdf's "128" key length maps to
+legacy RC4, which qpdf itself now refuses to write without an extra weak-crypto override. This
+module's success path cannot run under jsdom (Node's `fetch` does not resolve a `data:` URI the way a
+real browser does), so `qpdf-engine.ts` is excluded from unit coverage and instead verified with
+Playwright against the built file — same treatment as `pdf-render.ts`.
 
-**A viable path exists** if this is wanted: a qpdf (or similar) WASM build compiled with Emscripten's
-`wasmBinary` support, letting the binary be inlined as base64. That is a build-and-vendor task, not
-an integration task, and it would add well over a megabyte to a bundle that is already 6.74 MB.
+Verifying the round trip (Protect, then Unlock through the app's own existing tool) surfaced a real,
+**pre-existing** bug in `removePdfPassword` unrelated to anything F-1 added — see **P1-17**. Worked
+around for this tool's own output (`--object-streams=disable`); the general case is still open.
 
 **CI was red and is now fixed** (`afb6aa9`). `jsdom@30` requires Node `^22.22.2` but both workflow
 jobs pinned Node 20, so `verify` failed before a single test ran — meaning the gate protecting all
 of this work was not actually running. Both jobs are on Node 22 and `package.json` now declares
 `engines`.
 
-**Everything actionable in this audit is now implemented.** The only open items are F-1 and F-11,
-both blocked for measured reasons set out below rather than for want of effort.
+**Everything actionable in this audit is now implemented, save two open items:** **F-12** (real
+DOCX→PDF text conversion) and **P1-17** (the `removePdfPassword` bug above, for encrypted PDFs from
+other tools). **F-11** stays closed for the product reasons above.
 
 ### Worker feasibility on `file://` — measured, not assumed
 
@@ -131,7 +136,7 @@ one to that module made unrelated tool tests fail with a misleading assertion di
 `importOriginal()` and overrides only the side-effecting helpers. **Prefer that pattern** for any
 new module mock.
 
-### Two corrections to this document
+### Three corrections to this document
 
 **P0-1 was under-diagnosed.** It blamed `BrowserRouter` alone. After fixing that, the page still
 rendered **completely blank** from `file://`: a page opened from disk has a `null` origin, and Vite
@@ -150,6 +155,11 @@ then the acceptance test caught a **fourth** shape the probe missed. All four ar
 | no password option | `EncryptedPDFError` |
 | **empty password vs. a real-password file** | **`NEEDS PASSWORD`** ← missed by inspection |
 | corrupt file | `MissingPDFHeaderError` (rethrown untouched) |
+
+**F-1 was marked blocked on an incomplete API check.** See the correction above, under F-1 itself:
+the loader's `locateFile` hook was never tried, only the absence of a `wasmBinary` field was. The
+lesson is the same one P0-1 already taught this document — verify the real surface in a browser
+before writing "cannot be done."
 
 ### What already exists — reuse it, don't rebuild it
 
@@ -175,9 +185,19 @@ then the acceptance test caught a **fourth** shape the probe missed. All four ar
   the wrong pages.
 - **Encrypted fixtures** are committed (RC4-128, AES-256, empty-password) and regenerated by
   `scripts/generate-encrypted-fixtures.py`. The **T-2 blocker this document flagged is resolved.**
-- `protectPdf` is now **`removePdfPassword`**. `mergePdf` routes through `loadPdf` and names the
-  failing file (**P1-12**). `parsePageRange` is exported and order-preserving (**P1-6**/**P1-7**).
-- New tools: **`rotatePdf`** (**F-2**), **`rearrangePdf`** (**F-3**).
+- The original `protectPdf` (which despite its name only *removed* protection) is now
+  **`removePdfPassword`**. **`protectPdf` has since been reused for a genuinely new function** that
+  does the opposite — adds a password (**F-1**) — do not confuse the two by name alone.
+  `mergePdf` routes through `loadPdf` and names the failing file (**P1-12**). `parsePageRange` is
+  exported and order-preserving (**P1-6**/**P1-7**).
+- New tools: **`rotatePdf`** (**F-2**), **`rearrangePdf`** (**F-3**), **`protectPdf`** (**F-1**, via
+  `qpdf-engine.ts` — see **What already exists** below).
+- **`src/lib/qpdf-engine.ts`** — qpdf-via-WASM encryption (**F-1**). Only exposes one function,
+  `encryptPdfBytes`; cannot run under jsdom (see the coverage exclude in `vite.config.ts`), verify
+  with Playwright against the built file instead.
+- **`src/lib/inflate.ts`** — the `DecompressionStream`-based inflate helper, shared by the bundled
+  CMap tables (`pdf-render.ts`) and the bundled qpdf binary (`qpdf-engine.ts`). Extracted during
+  **F-1**; do not re-duplicate it a third time.
 
 ---
 
@@ -234,10 +254,10 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | | Found | Still open | Meaning |
 |---|---|---|---|
 | **P0** | 5 | **0** | Broken and user-visible. |
-| **P1** | 11 | **0** | Wrong behaviour, misleading errors, silent failures. |
+| **P1** | 12 | **1** (P1-17) | Wrong behaviour, misleading errors, silent failures. P1-17 found post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 13 | **2** (F-1, F-12) | Additive features. F-2–F-10, F-13 done; F-11 closed as incompatible; F-12 added post-release, still open. |
+| **F** | 13 | **1** (F-12) | Additive features. F-1–F-10, F-13 done; F-11 closed as incompatible; F-12 added post-release, still open. |
 
 ### The three that mattered most — all now fixed
 
@@ -771,6 +791,52 @@ user:
 
 **Accept:** convert a multi-page DOCX with a table — output is A4, has margins, no row is sliced
 mid-height, and the UI shows the rasterization notice.
+
+### P1-17 · `removePdfPassword` silently fails to decrypt a PDF whose xref is a compressed stream — open
+
+**Found while verifying F-1's round trip** (Protect → Unlock through the app's own two tools), not
+from a report. `removePdfPassword` (`loadPdf` + `pdfDoc.save()`, unchanged since **P0-3**) reports
+success and downloads a file — but the file is **still encrypted**. Reproduced directly, no app UI
+involved:
+
+```
+doc = PDFDocument.load(bytes, { password })   // isEncrypted → false, content readable
+saved = doc.save()
+reloaded = PDFDocument.load(saved, { ignoreEncryption: true })
+reloaded.isEncrypted → true                    // the save did not actually strip it
+```
+
+**Root cause, isolated at the byte level:** `@cantoo/pdf-lib` only clears `context.trailerInfo.Encrypt`
+(`PDFDocument.js` constructor) — the classic *trailer dictionary's* `/Encrypt` entry. A source PDF
+whose cross-reference table is a **compressed xref stream** (PDF 1.5+; qpdf's default, and common
+output from many modern PDF writers) has no separate trailer keyword — the xref stream's own
+dictionary carries `/Encrypt` inline instead. The parser does not special-case that object as "this
+was the xref stream, discard it"; it survives into the resaved file as an ordinary object, complete
+with its own `/Encrypt` reference. A later load can find that stale object and report the file as
+encrypted again, even though the genuinely current xref stream (which pdf-lib freshly wrote) has no
+`/Encrypt` at all. Confirmed by diffing the resaved bytes: the stale xref-stream object is present
+verbatim, sitting alongside the real, correct one.
+
+**Consequence:** any PDF encrypted with a tool that emits a compressed xref stream — not just this
+app's own **F-1** — fails Unlock silently: no error, a "Success!" toast, a file that downloads fine,
+and is still password protected. This predates F-1; F-1 only surfaced it by being the first thing in
+this codebase to produce that xref shape.
+
+**Mitigation shipped with F-1** (`qpdf-engine.ts`): qpdf is invoked with `--object-streams=disable`,
+forcing a classic trailer + xref table, which sidesteps the bug entirely for anything *this app*
+encrypts. Verified: decrypt-then-resave round-trips correctly once the source uses a classic xref.
+**This does not fix the general case** — a PDF encrypted by some other tool (Acrobat, a different
+qpdf-based tool, etc.) using a compressed xref stream will still hit this on Unlock.
+
+**Required (not done):** either teach `@cantoo/pdf-lib`'s parser to exclude the source document's own
+xref-stream object from the object graph it carries forward (a real parser fix, likely needs a patch
+against the fork), or have `removePdfPassword` detect the case (reload what it just saved and check
+`isEncrypted` before returning) and fail loudly instead of silently — the second is a much smaller
+change and turns this from a silent failure into an honest error, even though it doesn't recover the
+ability to unlock that file.
+
+**Accept:** `removePdfPassword` on a compressed-xref-stream encrypted PDF either genuinely decrypts it,
+or throws instead of returning a still-encrypted file labelled as success.
 
 ---
 
