@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. One gap found after release: **F-12**.
+## Status — every originally-scoped finding is implemented. Open post-release items: **F-12, F-13**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -22,6 +22,7 @@
 | — | P2-24 | ✅ done — `f76784e` (operations run in a worker) |
 | 8 | **F-1, F-11** | ⛔ **blocked — measured, not deferred. See below.** |
 | 8 | **F-12** | ⬜ **open — real work, scoped below.** Found post-release: `v0.1.0` testers correctly identified that DOCX conversion producing an unsearchable image undermines the feature's actual purpose, not just a footnote-able limitation. |
+| 8 | **F-13** | ⬜ **open — small, scoped below.** From [#2](https://github.com/sayjavajava/offline-pdf-utility/issues/2): Split's page-range extraction was never a bug, but "split into individual per-page files" is a real, missing mode. |
 
 ### The two features that cannot be built as specified
 
@@ -236,7 +237,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 11 | **0** | Wrong behaviour, misleading errors, silent failures. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 12 | **2** (F-1, F-12) | Additive features. F-2–F-10 done; F-11 closed as incompatible; F-12 added post-release. |
+| **F** | 13 | **3** (F-1, F-12, F-13) | Additive features. F-2–F-10 done; F-11 closed as incompatible; F-12/F-13 added post-release. |
 
 ### The three that mattered most — all now fixed
 
@@ -1143,6 +1144,32 @@ cleanly, which is a reasonable place to draw the v1 line.
 genuinely selectable and found by Ctrl+F — verified by reading it back with `pdfjs-dist`'s
 `getTextContent()` (the same check **F-7**'s text extraction already uses), not just by eyeballing the
 render.
+
+**F-13 · Split into a zip of individual per-page PDFs — open, small.** From
+[issue #2](https://github.com/sayjavajava/offline-pdf-utility/issues/2): a user expected Split to
+produce one PDF per page in a zip, and reported the single-combined-file result as a bug. It wasn't
+— re-verified against the `v0.1.0` release with a byte comparison, not just a page count: `all` and
+`1, 2, 3` on a 3-page document each produce a genuinely new, re-saved file that happens to contain
+every page, which is why it looked unchanged. Closed as not-a-bug. But the idea underneath — export
+each selected page as its own file — is a real, missing mode, and it's cheap now:
+
+- **The zip writer already exists and is proven.** `src/lib/zip.ts` (STORE method, no compression,
+  hand-rolled because the payloads are already-compressed PDF bytes) is already used by
+  **Extract Images** and **PDF to Images**. This is a third caller, not new infrastructure.
+- **The page selection already exists.** `parsePageRange` — order-preserving, duplicate-preserving
+  since **P1-7** — already resolves exactly the set this needs.
+- **The only new code** is: for each resolved page index, `copyPages` + `addPage` into its own
+  single-page `PDFDocument`, `save()`, and add it to the zip as `page-NNN.pdf` — the same per-page
+  loop shape `renderPdfPages` already uses, just producing a PDF page instead of a PNG.
+
+**Where it lives:** either a toggle on the existing `SplitTool` ("download as separate files"), or a
+`splitPdfToZip` function alongside `splitPdf` in `pdf-ops.ts` so it runs through the worker like every
+other operation (**F-9**). Prefer the toggle — it's the same tool, same inputs, just a different
+output shape, and a second tool for this would just be Split with extra steps.
+
+**Accept:** splitting a 3-page PDF for "all" with the new mode on produces a zip containing exactly 3
+single-page PDFs, each opening independently with the right content — proven the same way **T-4**
+proves page identity (via `pageIndicesOf`, not just a page count).
 
 ---
 
