@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open backlog items: **F-14, F-15, F-16, F-17** — written up for later implementation, not started. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented. Open backlog items: **F-14, F-15, F-16** — written up for later implementation, not started. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -24,7 +24,8 @@
 | 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
 | 8 | F-12 | ✅ done — `4ae3de0` |
 | 8 | F-13 | ✅ done — `dd92468` |
-| 9 | **F-14, F-15, F-17** | ⬜ **open — written up, not started. See below.** |
+| 9 | F-17 | ✅ done — `9644ed4` |
+| 9 | **F-14, F-15** | ⬜ **open — written up, not started. See below.** |
 | 9 | **F-16** | ⬜ **open — needs a real spike; initial evidence discourages the obvious approach. See below.** |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
@@ -260,7 +261,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 17 | **4** (F-14, F-15, F-16, F-17) | Additive features. F-1–F-10, F-12, F-13 done; F-11 closed as incompatible; F-14–F-17 written up, not started. |
+| **F** | 17 | **3** (F-14, F-15, F-16) | Additive features. F-1–F-10, F-12, F-13, F-17 done; F-11 closed as incompatible; F-14, F-15, F-16 written up, not started. |
 
 ### The three that mattered most — all now fixed
 
@@ -1363,7 +1364,7 @@ verified by successfully reading content back out of the repaired file afterward
 exit code — or (b) if the spike finds no such case, ship `--check` alone as a read-only diagnostic
 and record here why "repair" was dropped in favor of "diagnose."
 
-**F-17 · Permissions on Protect PDF — open, scoped below.** `qpdf --help=encryption` (verified, not
+**F-17 · Permissions on Protect PDF — ✅ DONE (`9644ed4`).** `qpdf --help=encryption` (verified, not
 assumed) supports real restriction flags at the 256-bit strength **F-1** already uses:
 `--print=[none|low|full]`, `--modify=[none|assembly|form|annotate|all]`, `--extract=[y|n]`
 (copy/extract text and graphics), `--annotate=[y|n]` (commenting/filling forms), `--assemble=[y|n]`,
@@ -1416,6 +1417,47 @@ needed) — plus the two required password fields. Don't expose all eight qpdf f
 qpdf's own `--show-encryption`, "print low resolution: not allowed" and "print high resolution: not
 allowed" when read back; it opens with just the open password (or no password, if left empty); and
 the permissions password — not the open password — is what's required to see unrestricted access.
+
+**What shipped and how it was verified.** `encryptPdfBytesWithPermissions` in `qpdf-engine.ts`
+(`--print`, `--modify`, `--extract` flags alongside `--encrypt <open> <permissions> 256`),
+`protectPdfWithPermissions` in `pdf-ops.ts`, wired through the worker like every other operation.
+`ProtectTool`'s existing single-password flow is untouched by default; a "Restrict printing,
+copying, or editing" checkbox reveals the permissions password field and the three v1 controls
+(print none/low/full, edit none/all, copy allowed/not) only when turned on — so the common "just
+add a password" case never sees the two-password model, and the model only appears once
+restrictions are actually being requested. The permissions password is rejected outright if it
+equals the open password, before any qpdf call — the exact silent-no-op shape this finding opened
+with (P0-5, P1-17's pattern repeating).
+
+**A correction to this section's own "Verification gap" note above:** it assumed
+`qpdf-engine.ts`'s success path was untestable under Vitest because "Node's fetch does not resolve
+a `data:` URI the way a browser does" (true when F-1 was written and verified). That assumption was
+checked again while writing this feature's tests, not carried forward — and on the Node 22.22.2
+this repo now requires (bumped for `jsdom@30`, see the F-1 section above), `fetch("data:...")`
+resolves correctly and the *entire* qpdf WASM module loads and runs under Vitest. Confirmed directly:
+`protectPdfWithPermissions` now has real unit tests (`pdf-utils.test.ts`) that run the actual qpdf
+WASM encryption and prove a wrong password is rejected while both the open and permissions passwords
+succeed — not just the pre-WASM validation, which is all that was previously testable this way. The
+`qpdf-engine.ts` coverage exclusion in `vite.config.ts` is left in place here (it still covers
+`encryptPdfBytes` and other qpdf-backed code this change doesn't touch, and revisiting a repo-wide
+coverage gate is out of scope) — but the premise behind it no longer holds unconditionally and is
+worth re-checking before the next qpdf-dependent feature assumes it.
+
+Verified against the real built app (Playwright, `file://`, all non-local requests blocked, 0
+network requests), using qpdf's own `--show-encryption` as the oracle (run a second time, directly
+under Node — confirmed working per the correction above — rather than only in-browser, since
+`@cantoo/pdf-lib` cannot read permission flags back): (1) protecting a file with printing/editing/
+copying all disabled and a distinct permissions password produced a file where `--show-encryption`
+reports every requested restriction as "not allowed", and correctly identifies the empty open
+password as "Supplied password is user password" and the permissions password as "Supplied password
+is owner password" — both valid, distinct credentials, exactly as required (note: `--show-encryption`
+reports the *declared* restriction bits from the encryption dictionary regardless of which valid
+password opened the file — confirmed via `qpdf --help=--show-encryption` — so it is not itself the
+tool that proves a reader *enforces* the bits differently for user vs. owner access; that enforcement
+is reader-side behavior specified by the PDF format itself, which is what the two-distinct-passwords
+requirement exists to make meaningful); (2) the UI rejects a permissions password equal to the open
+password before ever reaching qpdf; (3) leaving the restrictions checkbox off still produces the
+original F-1 behavior — full permissions, single shared password — with no regression.
 
 ---
 
