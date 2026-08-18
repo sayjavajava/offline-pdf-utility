@@ -107,3 +107,79 @@ export async function encryptPdfBytes(inputBytes: Uint8Array, password: string):
     console.error = originalError;
   }
 }
+
+export type DiagnosePdfResult = {
+  /**
+   * `clean`: no syntax/stream errors found. `warnings`: readable but qpdf
+   * flagged non-fatal issues (exit 3). `errors`: qpdf could not parse the
+   * file as a syntactically valid PDF (exit 2 or anything unexpected).
+   */
+  status: 'clean' | 'warnings' | 'errors';
+  /** qpdf's own report text, shown to the user as-is. */
+  report: string;
+};
+
+/**
+ * Runs qpdf's read-only `--check` (F-16) and reports what it found.
+ *
+ * This exists in place of "repair a damaged PDF": a spike (docs/CODE_AUDIT.md,
+ * F-16) tested qpdf's actual default recovery against a battery of corrupted
+ * PDFs — truncation, an out-of-range `startxref`, a corrupted stream
+ * `/Length` — across both classic xref-table and xref-stream files, and
+ * against every qpdf flag that could plausibly affect recovery
+ * (`--ignore-xref-streams`, `--qdf`; confirmed via `qpdf --help=all` that no
+ * other recovery-mode flag exists). qpdf's recovery **never once** succeeded
+ * on a file this app's own `loadPdf` (`@cantoo/pdf-lib`) did not already
+ * open successfully — the opposite of the assumption "Repair" started from.
+ * A real-world bug report search turned up a related but different failure
+ * shape (pdf-lib loading a malformed file without error, then silently
+ * carrying its damage into a resave Adobe Reader rejects) rather than the
+ * "loadPdf fails, qpdf succeeds" case this would need. Per that finding's own
+ * accept criterion, a spike that comes up empty ships this instead: qpdf's
+ * own words, not a repair promise this app cannot back up.
+ *
+ * `--check` is read-only by design (verified: it never produces an output
+ * file) — qpdf's own help text: "does not perform any validation of the
+ * actual PDF page content or semantic correctness... merely checks that the
+ * PDF file is syntactically valid."
+ */
+export async function diagnosePdfBytes(inputBytes: Uint8Array, password?: string): Promise<DiagnosePdfResult> {
+  const dataUrl = await wasmDataUrl();
+  const log: string[] = [];
+  const originalLog = console.log;
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  // --check's report goes through console.log on success and console.warn on
+  // failure (verified directly — neither matches the printErr assumption
+  // encryptPdfBytes's docstring makes above), so all three are intercepted.
+  console.log = (...args: unknown[]) => log.push(args.map(String).join(' '));
+  console.warn = (...args: unknown[]) => log.push(args.map(String).join(' '));
+  console.error = (...args: unknown[]) => log.push(args.map(String).join(' '));
+
+  try {
+    const mod = await createQpdfModule({
+      noInitialRun: true,
+      locateFile: () => dataUrl,
+    });
+
+    mod.FS.writeFile('in.pdf', inputBytes);
+    const args = password ? [`--password=${password}`, '--check', 'in.pdf'] : ['--check', 'in.pdf'];
+    const exitCode = mod.callMain(args);
+    const report = log.join('\n');
+
+    if (/invalid password/i.test(report)) {
+      throw new Error(
+        password
+          ? 'Incorrect password for this PDF.'
+          : 'This PDF is password protected. Enter its password to continue.',
+      );
+    }
+
+    const status = exitCode === 0 ? 'clean' : exitCode === 3 ? 'warnings' : 'errors';
+    return { status, report };
+  } finally {
+    console.log = originalLog;
+    console.warn = originalWarn;
+    console.error = originalError;
+  }
+}

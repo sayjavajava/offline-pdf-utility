@@ -3,7 +3,7 @@
 // actually be opened. Upstream has no `password` load option at all.
 import { PDFDocument, PDFRawStream, PDFInvalidObject, PDFName, degrees } from '@cantoo/pdf-lib';
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
-import { encryptPdfBytes } from './qpdf-engine';
+import { encryptPdfBytes, diagnosePdfBytes, type DiagnosePdfResult } from './qpdf-engine';
 
 /**
  * Strips leftover cross-reference-stream objects from a loaded document
@@ -766,4 +766,27 @@ export async function extractImages(
 ): Promise<ExtractImagesResult> {
     const pdfDoc = await loadPdf(file, password);
     return extractImagesFromDocument(pdfDoc);
+}
+
+export type { DiagnosePdfResult };
+
+/**
+ * Reports on a PDF's structural health via qpdf's read-only `--check`
+ * (F-16) — a diagnostic, not a repair. See diagnosePdfBytes in
+ * qpdf-engine.ts for why this shipped instead of "Repair a damaged PDF": a
+ * spike found no case where qpdf's recovery outperforms what this app's own
+ * loadPdf already tolerates for free.
+ *
+ * Deliberately does not go through loadPdf: the whole point is to diagnose
+ * files loadPdf itself cannot open, so this must not depend on it succeeding
+ * first. A password is still needed for an encrypted file — qpdf cannot
+ * check what it cannot decrypt — but no other pdf-lib-side validation runs
+ * before this reaches qpdf.
+ *
+ * @param file The PDF file to check.
+ * @param password The password, if the file is encrypted.
+ */
+export async function diagnosePdf(file: File, password?: string): Promise<DiagnosePdfResult> {
+    const inputBytes = new Uint8Array(await file.arrayBuffer());
+    return diagnosePdfBytes(inputBytes, password);
 }

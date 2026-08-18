@@ -21,6 +21,7 @@ export type {
   PageNumberOptions,
   PageNumberPosition,
   SplitPage,
+  DiagnosePdfResult,
 } from './pdf-ops';
 export type { ExtractedImage, ExtractImagesResult } from './image-extract';
 
@@ -71,6 +72,7 @@ export const rearrangePdf = (...a: Parameters<typeof ops.rearrangePdf>) => run('
 export const addPageNumbers = (...a: Parameters<typeof ops.addPageNumbers>) =>
   run('addPageNumbers', a);
 export const extractImages = (...a: Parameters<typeof ops.extractImages>) => run('extractImages', a);
+export const diagnosePdf = (...a: Parameters<typeof ops.diagnosePdf>) => run('diagnosePdf', a);
 
 /**
  * DOCX conversion stays on the main thread: docx-layout.ts's HTML parsing

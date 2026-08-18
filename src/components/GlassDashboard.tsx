@@ -13,6 +13,7 @@ import {
   Images,
   FileImage,
   FileType,
+  Stethoscope,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import { PageNumbersTool } from './tools/PageNumbersTool';
 import { ExtractImagesTool } from './tools/ExtractImagesTool';
 import { PdfToImagesTool } from './tools/PdfToImagesTool';
 import { ExtractTextTool } from './tools/ExtractTextTool';
+import { DiagnoseTool } from './tools/DiagnoseTool';
 
 const pdfTools = [
   {
@@ -109,6 +111,12 @@ const pdfTools = [
     description: "Pull the text out of a PDF as a plain text file.",
     icon: FileType,
   },
+  {
+    id: "diagnose",
+    title: "Diagnose PDF",
+    description: "Check a PDF's structure and report what's wrong, without changing it.",
+    icon: Stethoscope,
+  },
 ];
 
 export const GlassDashboard = () => {
@@ -164,6 +172,7 @@ export const GlassDashboard = () => {
             {activeTool === 'extractimages' && <ExtractImagesTool />}
             {activeTool === 'pdftoimages' && <PdfToImagesTool />}
             {activeTool === 'extracttext' && <ExtractTextTool />}
+            {activeTool === 'diagnose' && <DiagnoseTool />}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">
