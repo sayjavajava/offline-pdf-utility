@@ -39,6 +39,7 @@ const splitPdfToZip = vi.fn();
 const mergePdf = vi.fn();
 const removePdfPassword = vi.fn();
 const protectPdf = vi.fn();
+const protectPdfWithPermissions = vi.fn();
 const editPdfMetadata = vi.fn();
 const addWatermark = vi.fn();
 const convertImageToPdf = vi.fn();
@@ -54,6 +55,7 @@ vi.mock("@/lib/pdf-utils", async () => {
     mergePdf: (...args: unknown[]) => mergePdf(...args),
     removePdfPassword: (...args: unknown[]) => removePdfPassword(...args),
     protectPdf: (...args: unknown[]) => protectPdf(...args),
+    protectPdfWithPermissions: (...args: unknown[]) => protectPdfWithPermissions(...args),
     editPdfMetadata: (...args: unknown[]) => editPdfMetadata(...args),
     addWatermark: (...args: unknown[]) => addWatermark(...args),
     convertImageToPdf: (...args: unknown[]) => convertImageToPdf(...args),
@@ -80,6 +82,7 @@ beforeEach(() => {
   mergePdf.mockReset();
   removePdfPassword.mockReset();
   protectPdf.mockReset();
+  protectPdfWithPermissions.mockReset();
   editPdfMetadata.mockReset();
   addWatermark.mockReset();
   convertImageToPdf.mockReset();
@@ -355,6 +358,48 @@ describe("ProtectTool (F-1)", () => {
         expect.objectContaining({ message: "This PDF already has a password." }),
       ),
     );
+  });
+
+  it("stays on protectPdf's single-password path when restrictions are not toggled on", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(1, "plain.pdf");
+    protectPdf.mockResolvedValue(new Blob(["x"]));
+    render(<ProtectTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/^password$/i), "secret123");
+    await user.type(screen.getByLabelText(/confirm password/i), "secret123");
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+
+    await waitFor(() => expect(protectPdf).toHaveBeenCalledWith(file, "secret123"));
+    expect(protectPdfWithPermissions).not.toHaveBeenCalled();
+  });
+
+  it("switches to protectPdfWithPermissions once restrictions are toggled on, passing both passwords and the chosen flags", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(1, "plain.pdf");
+    protectPdfWithPermissions.mockResolvedValue(new Blob(["x"]));
+    render(<ProtectTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.click(screen.getByText(/restrict printing, copying, or editing/i));
+
+    await user.type(screen.getByLabelText(/permissions password/i), "owner-secret");
+    await user.selectOptions(screen.getByLabelText(/allow printing/i), "none");
+    await user.selectOptions(screen.getByLabelText(/allow editing/i), "none");
+    await user.click(screen.getByText(/allow copying text and images/i));
+
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+
+    await waitFor(() =>
+      expect(protectPdfWithPermissions).toHaveBeenCalledWith(file, "", "owner-secret", {
+        print: "none",
+        extract: false,
+        modify: "none",
+      }),
+    );
+    expect(protectPdf).not.toHaveBeenCalled();
+    expect(downloadBlob).toHaveBeenCalled();
   });
 });
 

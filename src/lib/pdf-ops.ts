@@ -3,7 +3,7 @@
 // actually be opened. Upstream has no `password` load option at all.
 import { PDFDocument, PDFRawStream, PDFInvalidObject, PDFName, degrees } from '@cantoo/pdf-lib';
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
-import { encryptPdfBytes } from './qpdf-engine';
+import { encryptPdfBytes, encryptPdfBytesWithPermissions, type PdfPermissions } from './qpdf-engine';
 
 /**
  * Strips leftover cross-reference-stream objects from a loaded document
@@ -384,6 +384,40 @@ export async function protectPdf(file: File, password: string): Promise<Blob> {
 
     const inputBytes = new Uint8Array(await file.arrayBuffer());
     const outputBytes = await encryptPdfBytes(inputBytes, password);
+    return new Blob([outputBytes], { type: 'application/pdf' });
+}
+
+export type { PdfPermissions };
+
+/**
+ * Adds password protection to a PDF with distinct open/permissions passwords
+ * and restriction flags (F-17) — the counterpart to protectPdf for callers
+ * who actually need the restrictions to be enforceable.
+ *
+ * A single shared password (what protectPdf does) makes restriction
+ * checkboxes a no-op: PDF permissions are only enforced for whoever opens the
+ * document with the *open* password, and the *permissions* password bypasses
+ * them entirely. See encryptPdfBytesWithPermissions for where that is
+ * actually enforced (rejecting a permissions password equal to the open
+ * password) — this function only forwards to it.
+ *
+ * The open password may be empty (a real, common pattern: "anyone can open
+ * it, but can't print or copy without the permissions password").
+ *
+ * @param file The PDF file to protect.
+ * @param openPassword The password required to open the file. May be empty.
+ * @param permissionsPassword The password required to bypass restrictions.
+ * @param permissions Which restrictions to apply.
+ * @returns A Blob of the newly encrypted PDF file.
+ */
+export async function protectPdfWithPermissions(
+    file: File,
+    openPassword: string,
+    permissionsPassword: string,
+    permissions: PdfPermissions,
+): Promise<Blob> {
+    const inputBytes = new Uint8Array(await file.arrayBuffer());
+    const outputBytes = await encryptPdfBytesWithPermissions(inputBytes, openPassword, permissionsPassword, permissions);
     return new Blob([outputBytes], { type: 'application/pdf' });
 }
 

@@ -21,6 +21,7 @@ export type {
   PageNumberOptions,
   PageNumberPosition,
   SplitPage,
+  PdfPermissions,
 } from './pdf-ops';
 export type { ExtractedImage, ExtractImagesResult } from './image-extract';
 
@@ -61,6 +62,8 @@ export const mergePdf = (...a: Parameters<typeof ops.mergePdf>) => run('mergePdf
 export const removePdfPassword = (...a: Parameters<typeof ops.removePdfPassword>) =>
   run('removePdfPassword', a);
 export const protectPdf = (...a: Parameters<typeof ops.protectPdf>) => run('protectPdf', a);
+export const protectPdfWithPermissions = (...a: Parameters<typeof ops.protectPdfWithPermissions>) =>
+  run('protectPdfWithPermissions', a);
 export const editPdfMetadata = (...a: Parameters<typeof ops.editPdfMetadata>) =>
   run('editPdfMetadata', a);
 export const convertImageToPdf = (...a: Parameters<typeof ops.convertImageToPdf>) =>

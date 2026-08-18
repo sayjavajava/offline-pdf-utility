@@ -68,22 +68,18 @@ function describeFailure(log: string[]): string {
 }
 
 /**
- * Encrypts `inputBytes` with AES-256 (qpdf's strongest, and its default
- * "256" key length — "128" maps to legacy RC4, which qpdf itself now refuses
- * to write without an extra weak-crypto override, so it is not offered here).
- *
- * The same password is used for both the user and owner password, matching
- * what "add a password to open this PDF" means to someone using this tool —
- * there is no UI for the separate permissions an owner password normally
- * controls.
+ * Runs one qpdf CLI invocation against `inputBytes` and returns the output
+ * file's bytes. Shared by encryptPdfBytes and encryptPdfBytesWithPermissions
+ * so both go through the same virtual-filesystem/console-interception
+ * mechanics instead of duplicating them.
  */
-export async function encryptPdfBytes(inputBytes: Uint8Array, password: string): Promise<Uint8Array> {
+async function runQpdfEncrypt(inputBytes: Uint8Array, args: string[]): Promise<Uint8Array> {
   const dataUrl = await wasmDataUrl();
   const log: string[] = [];
   const originalWarn = console.warn;
   const originalError = console.error;
-  console.warn = (...args: unknown[]) => log.push(args.map(String).join(' '));
-  console.error = (...args: unknown[]) => log.push(args.map(String).join(' '));
+  console.warn = (...a: unknown[]) => log.push(a.map(String).join(' '));
+  console.error = (...a: unknown[]) => log.push(a.map(String).join(' '));
 
   try {
     const mod = await createQpdfModule({
@@ -92,7 +88,7 @@ export async function encryptPdfBytes(inputBytes: Uint8Array, password: string):
     });
 
     mod.FS.writeFile('in.pdf', inputBytes);
-    const exitCode = mod.callMain(['--encrypt', password, password, '256', '--', 'in.pdf', 'out.pdf']);
+    const exitCode = mod.callMain(args);
     if (exitCode !== 0) {
       throw new Error(describeFailure(log));
     }
@@ -106,4 +102,76 @@ export async function encryptPdfBytes(inputBytes: Uint8Array, password: string):
     console.warn = originalWarn;
     console.error = originalError;
   }
+}
+
+/**
+ * Encrypts `inputBytes` with AES-256 (qpdf's strongest, and its default
+ * "256" key length — "128" maps to legacy RC4, which qpdf itself now refuses
+ * to write without an extra weak-crypto override, so it is not offered here).
+ *
+ * The same password is used for both the user and owner password, matching
+ * what "add a password to open this PDF" means to someone using this tool —
+ * there is no UI for the separate permissions an owner password normally
+ * controls. See encryptPdfBytesWithPermissions (F-17) for that.
+ */
+export async function encryptPdfBytes(inputBytes: Uint8Array, password: string): Promise<Uint8Array> {
+  return runQpdfEncrypt(inputBytes, ['--encrypt', password, password, '256', '--', 'in.pdf', 'out.pdf']);
+}
+
+export type PdfPermissions = {
+  /** How much printing is allowed for a reader who only has the open password. */
+  print: 'none' | 'low' | 'full';
+  /** Allow copying text/images out of the document. */
+  extract: boolean;
+  /**
+   * Allow document modification. qpdf's own scale has five levels
+   * (none/assembly/form/annotate/all); this UI collapses that to a binary for
+   * v1 — see F-17 in docs/CODE_AUDIT.md.
+   */
+  modify: 'none' | 'all';
+};
+
+/**
+ * Encrypts `inputBytes` with AES-256, distinct open (user) and permissions
+ * (owner) passwords, and restriction flags (F-17).
+ *
+ * `qpdf --help=encryption` (verified, not assumed — see docs/CODE_AUDIT.md)
+ * documents that restrictions are enforced only for whoever opens the
+ * document with the *open* password: anyone who supplies the *permissions*
+ * password gets full, unrestricted access regardless of these flags. Passing
+ * the same string for both would silently produce a file that looks
+ * protected but enforces nothing — the exact "looks like success, does
+ * nothing" shape this audit has flagged elsewhere (P0-5, P1-17) — so that
+ * case is rejected here rather than left to produce a working-looking no-op.
+ */
+export async function encryptPdfBytesWithPermissions(
+  inputBytes: Uint8Array,
+  openPassword: string,
+  permissionsPassword: string,
+  permissions: PdfPermissions,
+): Promise<Uint8Array> {
+  if (!permissionsPassword) {
+    throw new Error('Enter a permissions password.');
+  }
+  if (permissionsPassword.length < 4) {
+    throw new Error('Use a permissions password of at least 4 characters.');
+  }
+  if (permissionsPassword === openPassword) {
+    throw new Error(
+      'The permissions password must differ from the open password — otherwise anyone who can open the file can also bypass every restriction.',
+    );
+  }
+
+  return runQpdfEncrypt(inputBytes, [
+    '--encrypt',
+    openPassword,
+    permissionsPassword,
+    '256',
+    `--print=${permissions.print}`,
+    `--modify=${permissions.modify}`,
+    `--extract=${permissions.extract ? 'y' : 'n'}`,
+    '--',
+    'in.pdf',
+    'out.pdf',
+  ]);
 }
