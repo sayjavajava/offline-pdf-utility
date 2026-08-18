@@ -6,7 +6,7 @@
  * `[0, 4]`. Do not "fix" this back to sorted order.
  */
 import { describe, expect, it } from "vitest";
-import { parsePageRange, splitPdf } from "./pdf-utils";
+import { parsePageRange, splitPdf, splitPdfToZip } from "./pdf-utils";
 import { makePdfFile, pageIndicesOf } from "@/test/fixtures";
 
 describe("parsePageRange (T-3 / P1-6 / P1-7)", () => {
@@ -130,5 +130,43 @@ describe("splitPdf page-range surfacing (T-3)", () => {
     expect(parsePageRange("99,104", 5).errors[0]).toBe(
       "Pages 99, 104 are outside this 5-page document.",
     );
+  });
+});
+
+describe("splitPdfToZip (F-13)", () => {
+  it("returns one single-page PDF per requested page, each with the right identity", async () => {
+    const pages = await splitPdfToZip(await makePdfFile(5), "2,4");
+    expect(pages.map((p) => p.pageNumber)).toEqual([2, 4]);
+    expect(await pageIndicesOf(pages[0].bytes)).toEqual([1]);
+    expect(await pageIndicesOf(pages[1].bytes)).toEqual([3]);
+  });
+
+  it('accepts "all" and returns every page in order', async () => {
+    const pages = await splitPdfToZip(await makePdfFile(4), "all");
+    expect(pages.map((p) => p.pageNumber)).toEqual([1, 2, 3, 4]);
+    for (const [i, page] of pages.entries()) {
+      expect(await pageIndicesOf(page.bytes)).toEqual([i]);
+    }
+  });
+
+  it("preserves asked-for order and duplicates (P1-7), each as its own entry", async () => {
+    const pages = await splitPdfToZip(await makePdfFile(5), "5,1,1");
+    expect(pages.map((p) => p.pageNumber)).toEqual([5, 1, 1]);
+    expect(await pageIndicesOf(pages[0].bytes)).toEqual([4]);
+    expect(await pageIndicesOf(pages[1].bytes)).toEqual([0]);
+    expect(await pageIndicesOf(pages[2].bytes)).toEqual([0]);
+  });
+
+  it("surfaces the same range errors as splitPdf (P1-6)", async () => {
+    await expect(splitPdfToZip(await makePdfFile(5), "1-3, 99")).rejects.toThrow(
+      /Page 99 is outside this 5-page document/,
+    );
+  });
+
+  it("each returned page stands alone as a valid single-page PDF", async () => {
+    const pages = await splitPdfToZip(await makePdfFile(3), "all");
+    for (const page of pages) {
+      expect(await pageIndicesOf(page.bytes)).toHaveLength(1);
+    }
   });
 });

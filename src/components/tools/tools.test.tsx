@@ -35,6 +35,7 @@ vi.mock("@/lib/download", async (importOriginal) => ({
 }));
 
 const splitPdf = vi.fn();
+const splitPdfToZip = vi.fn();
 const mergePdf = vi.fn();
 const removePdfPassword = vi.fn();
 const editPdfMetadata = vi.fn();
@@ -48,6 +49,7 @@ vi.mock("@/lib/pdf-utils", async () => {
   return {
     ...actual,
     splitPdf: (...args: unknown[]) => splitPdf(...args),
+    splitPdfToZip: (...args: unknown[]) => splitPdfToZip(...args),
     mergePdf: (...args: unknown[]) => mergePdf(...args),
     removePdfPassword: (...args: unknown[]) => removePdfPassword(...args),
     editPdfMetadata: (...args: unknown[]) => editPdfMetadata(...args),
@@ -71,6 +73,7 @@ beforeEach(() => {
   derivedName.mockClear();
   reportToolError.mockClear();
   splitPdf.mockReset();
+  splitPdfToZip.mockReset();
   mergePdf.mockReset();
   removePdfPassword.mockReset();
   editPdfMetadata.mockReset();
@@ -177,6 +180,46 @@ describe("SplitTool (T-10)", () => {
     await waitFor(() => {
       expect(screen.queryByText(/selected file:/i)).not.toBeInTheDocument();
     });
+  });
+
+  it("calls splitPdfToZip instead of splitPdf when 'separate files' is checked (F-13)", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(3, "report.pdf");
+    splitPdfToZip.mockResolvedValue([
+      { pageNumber: 1, bytes: new Uint8Array([1]) },
+      { pageNumber: 2, bytes: new Uint8Array([2]) },
+    ]);
+    render(<SplitTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/pages to extract/i), "1,2");
+    await user.click(screen.getByLabelText(/download as separate files/i));
+    await user.click(screen.getByRole("button", { name: /split pdf/i }));
+
+    await waitFor(() => expect(splitPdfToZip).toHaveBeenCalledWith(file, "1,2", ""));
+    expect(splitPdf).not.toHaveBeenCalled();
+    expect(downloadBlob).toHaveBeenCalled();
+    // Zipped, so the download uses the derived-name helper rather than a bare filename.
+    expect(derivedName).toHaveBeenCalledWith(file.name, "_split", "zip");
+  });
+
+  it("downloads a bare PDF, not a zip, when only one page is selected in separate-files mode", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(3, "report.pdf");
+    splitPdfToZip.mockResolvedValue([{ pageNumber: 2, bytes: new Uint8Array([9]) }]);
+    render(<SplitTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/pages to extract/i), "2");
+    await user.click(screen.getByLabelText(/download as separate files/i));
+    await user.click(screen.getByRole("button", { name: /split pdf/i }));
+
+    await waitFor(() => expect(splitPdfToZip).toHaveBeenCalledWith(file, "2", ""));
+    expect(derivedName).not.toHaveBeenCalled();
+    expect(downloadBlob).toHaveBeenCalledWith(
+      expect.any(Blob),
+      expect.stringContaining("page-002.pdf"),
+    );
   });
 });
 

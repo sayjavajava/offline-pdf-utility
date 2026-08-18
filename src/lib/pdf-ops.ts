@@ -190,6 +190,56 @@ export async function splitPdf(file: File, pages: string, password?: string): Pr
     return new Blob([pdfBytes], { type: 'application/pdf' });
 }
 
+export type SplitPage = {
+    /** 1-based original page number, for filenames and messages. */
+    pageNumber: number;
+    bytes: Uint8Array;
+};
+
+/**
+ * Splits a PDF the same way `splitPdf` does, but returns each selected page
+ * as its own single-page PDF (F-13) instead of one combined file.
+ *
+ * From issue #2: a user expected Split to hand back individual files and
+ * read the single combined output as a bug. It wasn't — `splitPdf` extracts
+ * a page *range* into one document, which is genuinely different from what
+ * this function does. Sharing the exact resolution block above means both
+ * modes agree on what a given range string means and on their error text;
+ * only the packaging differs.
+ *
+ * Packaging (bare file vs. zip) is a UI concern and is left to the caller —
+ * see ExtractImagesTool and PdfToImagesTool for the established pattern.
+ */
+export async function splitPdfToZip(file: File, pages: string, password?: string): Promise<SplitPage[]> {
+    const pdfDoc = await loadPdf(file, password);
+
+    const pageCount = pdfDoc.getPageCount();
+    let pageIndices: number[];
+
+    if (pages.toLowerCase() === 'all') {
+        pageIndices = Array.from({ length: pageCount }, (_, i) => i);
+    } else {
+        const parsed = parsePageRange(pages, pageCount);
+        if (parsed.errors.length > 0) {
+            throw new Error(parsed.errors.join(' '));
+        }
+        pageIndices = parsed.indices;
+    }
+
+    if (pageIndices.length === 0) {
+        throw new Error('Invalid page range specified.');
+    }
+
+    const result: SplitPage[] = [];
+    for (const pageIndex of pageIndices) {
+        const single = await PDFDocument.create();
+        const [copied] = await single.copyPages(pdfDoc, [pageIndex]);
+        single.addPage(copied);
+        result.push({ pageNumber: pageIndex + 1, bytes: await single.save() });
+    }
+    return result;
+}
+
 /**
  * Merges multiple PDF files into a single document.
  * @param files An array of PDF files to merge.

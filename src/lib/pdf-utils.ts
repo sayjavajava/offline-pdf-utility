@@ -20,6 +20,7 @@ export type {
   PageNumberFormat,
   PageNumberOptions,
   PageNumberPosition,
+  SplitPage,
 } from './pdf-ops';
 export type { ExtractedImage, ExtractImagesResult } from './image-extract';
 
@@ -55,6 +56,7 @@ async function run<K extends keyof typeof ops>(
 }
 
 export const splitPdf = (...a: Parameters<typeof ops.splitPdf>) => run('splitPdf', a);
+export const splitPdfToZip = (...a: Parameters<typeof ops.splitPdfToZip>) => run('splitPdfToZip', a);
 export const mergePdf = (...a: Parameters<typeof ops.mergePdf>) => run('mergePdf', a);
 export const removePdfPassword = (...a: Parameters<typeof ops.removePdfPassword>) =>
   run('removePdfPassword', a);
