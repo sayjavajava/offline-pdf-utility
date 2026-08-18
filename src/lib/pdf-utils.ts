@@ -73,7 +73,8 @@ export const addPageNumbers = (...a: Parameters<typeof ops.addPageNumbers>) =>
 export const extractImages = (...a: Parameters<typeof ops.extractImages>) => run('extractImages', a);
 
 /**
- * DOCX conversion stays on the main thread: it renders HTML through
- * html2canvas, which needs a DOM the worker does not have.
+ * DOCX conversion stays on the main thread: docx-layout.ts's HTML parsing
+ * needs `DOMParser`, which is not available in a dedicated Worker's global
+ * scope (confirmed in a real browser — see docx-convert.ts).
  */
 export const convertDocxToPdf = convertDocxToPdfImpl;

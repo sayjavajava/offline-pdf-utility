@@ -5,47 +5,7 @@ import { describe, expect, it } from "vitest";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { addPageNumbers, formatPageNumber } from "./pdf-utils";
 import { encryptedPdfFile, FIXTURE_PASSWORD, makePdfFile, pageIndicesOf } from "@/test/fixtures";
-
-/**
- * Pull the *drawn strings* out of a produced PDF.
- *
- * pdf-lib writes show-text operands as hex (`<41424> Tj`), so a substring
- * match against the raw stream would both miss the text and match stray digits
- * from coordinates — passing for the wrong reason.
- */
-async function drawnText(blob: Blob): Promise<string[]> {
-  const zlib = await import("node:zlib");
-  const raw = Buffer.from(await blob.arrayBuffer()).toString("latin1");
-  let streams = "";
-  for (const m of raw.matchAll(/stream\r?\n([\s\S]*?)endstream/g)) {
-    try {
-      streams += zlib.inflateSync(Buffer.from(m[1], "latin1")).toString("latin1");
-    } catch {
-      streams += m[1];
-    }
-  }
-  return [...streams.matchAll(/<([0-9A-Fa-f]+)>\s*Tj/g)].map((m) =>
-    Buffer.from(m[1], "hex").toString("latin1"),
-  );
-}
-
-/** Where each stamp was placed, as [x, y] from the text matrix. */
-async function stampPositions(blob: Blob): Promise<[number, number][]> {
-  const zlib = await import("node:zlib");
-  const raw = Buffer.from(await blob.arrayBuffer()).toString("latin1");
-  let streams = "";
-  for (const m of raw.matchAll(/stream\r?\n([\s\S]*?)endstream/g)) {
-    try {
-      streams += zlib.inflateSync(Buffer.from(m[1], "latin1")).toString("latin1");
-    } catch {
-      streams += m[1];
-    }
-  }
-  return [...streams.matchAll(/1 0 0 1 ([-\d.]+) ([-\d.]+) Tm/g)].map((m) => [
-    Number(m[1]),
-    Number(m[2]),
-  ]);
-}
+import { drawnText, stampPositions } from "@/test/pdf-inspect";
 
 describe("formatPageNumber", () => {
   it("renders each format", () => {

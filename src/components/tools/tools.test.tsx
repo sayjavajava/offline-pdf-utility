@@ -438,7 +438,7 @@ describe("ConvertTool (T-10)", () => {
     await user.click(screen.getByRole("button", { name: /convert to pdf/i }));
 
     await waitFor(() => expect(convertImageToPdf).toHaveBeenCalledWith(file));
-    expect(screen.getByText(/renders pages as images/i)).toBeInTheDocument();
+    expect(screen.getByText(/selectable and searchable/i)).toBeInTheDocument();
   });
 
   it("still toasts on non-Error rejection (P0-5)", async () => {

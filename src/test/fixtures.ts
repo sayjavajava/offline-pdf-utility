@@ -111,6 +111,15 @@ export function jpegFile(name = "image.jpg", type: string = "image/jpeg"): File 
   return new File([bytesFromBase64(JPEG_1X1)], name, { type });
 }
 
+/** A `data:` URI for the same 1x1 PNG, matching mammoth's default image-embedding shape. */
+export function pngDataUri(): string {
+  return `data:image/png;base64,${PNG_1X1}`;
+}
+
+export function jpegDataUri(): string {
+  return `data:image/jpeg;base64,${JPEG_1X1}`;
+}
+
 // ---------------------------------------------------------------------------
 // DOCX
 // ---------------------------------------------------------------------------
