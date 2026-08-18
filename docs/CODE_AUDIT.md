@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open post-release items: **F-12**. Closed (won't build): **F-11**.
+## Status — every finding in this audit is implemented. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -22,7 +22,7 @@
 | — | P2-24 | ✅ done — `f76784e` (operations run in a worker) |
 | 8 | **F-11** | ⛔ **closed, will not be built — a deliberate product decision. See below.** |
 | 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
-| 8 | **F-12** | ⬜ **open — real work, scoped below.** Found post-release: `v0.1.0` testers correctly identified that DOCX conversion producing an unsearchable image undermines the feature's actual purpose, not just a footnote-able limitation. |
+| 8 | F-12 | ✅ done — `4ae3de0` |
 | 8 | F-13 | ✅ done — `dd92468` |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
@@ -68,8 +68,8 @@ jobs pinned Node 20, so `verify` failed before a single test ran — meaning the
 of this work was not actually running. Both jobs are on Node 22 and `package.json` now declares
 `engines`.
 
-**Everything actionable in this audit is now implemented, save one open item:** **F-12** (real
-DOCX→PDF text conversion). **F-11** stays closed for the product reasons above.
+**Everything actionable in this audit is now implemented.** **F-11** stays closed for the product
+reasons above; **F-12** (real DOCX→PDF text conversion) is done — see below.
 
 ### Worker feasibility on `file://` — measured, not assumed
 
@@ -100,8 +100,9 @@ be a sibling file. Tested in Chromium against the real `dist/index.html` over `f
 - `npm run test` → **181 passing**. `npm run typecheck` → clean under `strict`.
 - `npm run test:coverage` → passes; `src/lib` at **94% lines**. Thresholds are a ratchet set just
   below what the suite achieves — raise them as coverage improves, never lower them to go green.
-  `pdf-render.ts`, `docx-convert.ts` and `pdf.worker.ts` are excluded because they cannot execute
-  under jsdom at all; the Playwright checks cover them.
+  `pdf-render.ts`, `pdf.worker.ts`, and `qpdf-engine.ts` are excluded because they cannot execute
+  under jsdom at all; the Playwright checks cover them. (`docx-convert.ts` used to be excluded for
+  the same reason — needing `html2canvas` and a live DOM — but no longer exists: see **F-12**.)
 - `npm run lint` → **0 errors, 1 warning** (react-refresh on button variants).
 - `npm run build` → single self-contained `dist/index.html` (~6.74 MB; pdf.js is the largest
   single contributor, then the inlined PDF worker, then the bundled CMap tables).
@@ -223,7 +224,7 @@ operations entirely client-side — nothing is uploaded. Substantially all logic
 
 | File | Role |
 |---|---|
-| `src/lib/pdf-utils.ts` | **All** PDF logic over `@cantoo/pdf-lib`, `mammoth`, `html2pdf.js`. |
+| `src/lib/pdf-utils.ts` | **All** PDF logic over `@cantoo/pdf-lib`, `mammoth`, `pdfjs-dist`, qpdf (WASM). |
 | `src/lib/download.ts` | Shared download / filename / error-toast helpers. |
 | `src/lib/file-validation.ts` | PDF magic/extension checks + large-file warning. |
 | `src/components/tools/*.tsx` | One form component per tool (8 tools). |
@@ -256,7 +257,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 13 | **1** (F-12) | Additive features. F-1–F-10, F-13 done; F-11 closed as incompatible; F-12 added post-release, still open. |
+| **F** | 13 | **0** | Additive features. F-1–F-10, F-12, F-13 done; F-11 closed as incompatible. |
 
 ### The three that mattered most — all now fixed
 
@@ -791,6 +792,10 @@ user:
 **Accept:** convert a multi-page DOCX with a table — output is A4, has margins, no row is sliced
 mid-height, and the UI shows the rasterization notice.
 
+**Superseded by F-12.** The rasterizing pipeline this finding improved (margins, page sizing, the UI
+warning) was later replaced entirely with a text-based one — see **F-12** below. `html2pdf.js` and the
+rasterization notice described here no longer exist.
+
 ### P1-17 · `removePdfPassword` silently fails to decrypt a PDF whose xref is a compressed stream — ✅ DONE (`b4ace14`)
 
 **Found while verifying F-1's round trip** (Protect → Unlock through the app's own two tools), not
@@ -1180,49 +1185,49 @@ primary distribution mode. This needs a second hosted build target to mean anyth
 product decision. Original rationale follows: makes a *hosted* deployment work offline after first load, and
 gives installability. Complements **P0-2**, which fixes the `file://` case.
 
-**F-12 · Real, text-based DOCX→PDF conversion — open, real work, not a quick fix.** Raised by a
-tester on `v0.1.0`: `convertDocxToPdf` (`src/lib/pdf-utils.ts`) still rasterizes, exactly as **P1-16**
-described and only partially mitigated. The pipeline is `mammoth` → HTML → `html2pdf.js`
-(`html2canvas` + `jsPDF`), which embeds a **picture** of the page as the PDF content. P1-16 fixed the
-symptoms — margins, page sizing, a UI warning — but the fundamental gap remains: **no selectable,
-searchable, or copyable text**, which is the actual reason most people convert a document to PDF
-(resumes, reports, anything meant to be searched, copied, or read by a screen reader). A warning label
-does not close that gap; it only discloses it.
+**F-12 · Real, text-based DOCX→PDF conversion — ✅ DONE (`4ae3de0`).** Raised by a tester on `v0.1.0`:
+`convertDocxToPdf` still rasterized, exactly as **P1-16** described and only partially mitigated. The
+old pipeline was `mammoth` → HTML → `html2pdf.js` (`html2canvas` + `jsPDF`), which embedded a
+**picture** of the page as the PDF content — no selectable, searchable, or copyable text, which is the
+actual reason most people convert a document to PDF.
 
-**Why this is a real project, not a config change:** producing genuine text output means laying out
-mammoth's HTML as real PDF text objects — line wrapping against actual font metrics, page breaks that
-don't split a paragraph mid-word, headings, bold/italic runs, lists, and at minimum simple tables.
-That's a layout engine, not a rendering tweak.
+**Chosen approach: hand-rolled layout on `@cantoo/pdf-lib`** (`src/lib/docx-layout.ts`), the
+"preferred default" this document named — `pdfmake`, the other candidate, was checked rather than
+assumed: it pulls in `pdfkit` (a whole second PDF engine) at 15 MB unpacked, pure duplication of what
+`@cantoo/pdf-lib` already does in this bundle, on top of a translation-layer risk from mammoth's HTML
+to pdfmake's `docDefinition` JSON. Hand-rolling draws real text objects the same way `addWatermark` and
+`addPageNumbers` already do — DOM-walk mammoth's HTML into a small block model (headings, paragraphs
+with bold/italic/link runs, ordered/unordered lists with nesting, simple tables, block images), then
+lay those blocks out onto A4 pages with greedy word-wrapping against real font metrics.
 
-**Candidate approaches — none chosen yet, each needs verification before commitment** (same discipline
-as **F-1**: this document previously recommended a library without checking it could do the job, and
-that cost a full spike to discover):
+**Scope, matching what mammoth's HTML actually emits** (verified against real mammoth output, not
+guessed): headings, paragraphs, bold/italic runs, lists, simple tables, and images embedded as `data:`
+URIs. Deliberately not supported, and not silently faked — see `docx-layout.ts`'s module docstring:
+only the four standard Helvetica variants are used (a character outside WinAnsi — CJK, Cyrillic, emoji
+— is replaced with `?` and counted in a non-blocking warning, never silently dropped); links render
+styled but are not clickable (no PDF Link annotation); a table row that doesn't fit the remaining page
+moves to a new page as a whole rather than splitting.
 
-1. **Hand-rolled layout on `@cantoo/pdf-lib`.** No new dependency; consistent with how every other
-   tool in this app already draws text (`addWatermark`, `addPageNumbers`) and already owns the
-   font-encoding validation (`assertEncodable`) this would need too. Most implementation work, but the
-   lowest-risk failure mode: a layout bug produces visually-wrong-but-safe output, not a false
-   guarantee (contrast with why hand-rolled encryption was rejected for F-1). **Preferred default**
-   unless the spike finds a clearly better option.
-2. **`pdfmake`.** Purpose-built for structured-content → real-text PDF, with wrapping, lists, and
-   tables handled for you, and it embeds fonts rather than fetching them (verify this explicitly — it
-   is the make-or-break property for this app). Needs a translation layer from mammoth's HTML to
-   pdfmake's `docDefinition` JSON; whether an existing one is reliable enough to depend on, or whether
-   to write a narrow one covering only what mammoth actually emits, is exactly what the spike should
-   determine. Adds a dependency and font-embedding bundle weight — measure it.
-3. Anything else the spike turns up. Do not add a dependency to this offline, single-file build
-   without doing what **F-1**'s spike did: read the source, confirm no network fetch is reachable from
-   the code path used, and measure the actual bundle cost — not the README's claim.
+**A real mistake, caught before it shipped, not after:** since nothing in the new pipeline needs
+`html2canvas` or a live DOM to render into (mammoth needs no DOM at all; the layout engine only uses
+`DOMParser`), the plan was to route it through the PDF worker (**F-9**) for the same off-main-thread
+benefit every other tool gets. `DOMParser` is *not*, in fact, available in a dedicated Worker's global
+scope in Chromium — confirmed by actually running it there and getting `DOMParser is not defined`.
+jsdom emulates one, which is exactly why this looked worker-safe under the unit tests and only failed
+once Playwright drove it end to end against a real browser. **The same class of mistake this document
+has hit before** (P0-1, and F-1's own "blocked" correction) — a Node/jsdom-only assumption stated as
+fact. Reverted to the main thread, the same boundary the old pipeline used, now for a different reason;
+documented in `docx-convert.ts` so a future change doesn't retry it without testing for real first.
 
-**Scope the spike should answer before implementation starts:** what subset of mammoth's HTML output
-(headings, bold/italic, lists, tables, images, hyperlinks) is worth supporting for v1 — mammoth's
-`messages` array (currently discarded, see P1-16) is a ready-made signal for what it couldn't map
-cleanly, which is a reasonable place to draw the v1 line.
+**Bonus: the bundle got smaller, not bigger.** Removing `html2pdf.js` and its dependents (`html2canvas`,
+`jsPDF` — 22 packages) outweighed the new layout code, and moving conversion out of `pdf-ops.ts` (it
+never actually ran through the worker) stopped it being duplicated into the worker bundle too.
 
-**Accept:** a DOCX with a heading, a bold/italic run, and a list converts to a PDF where that text is
-genuinely selectable and found by Ctrl+F — verified by reading it back with `pdfjs-dist`'s
-`getTextContent()` (the same check **F-7**'s text extraction already uses), not just by eyeballing the
-render.
+**Accept, verified for real, not by eyeballing the render:** converted a real DOCX (heading, a
+bold/italic run, nested bullet and numbered lists, a table, accented Latin text) through the actual
+built `file://` app with every non-local request blocked, then fed the resulting PDF into this app's
+own **Extract Text** tool — the exact check this document specified — and got the genuine document
+text back, correctly structured, with zero network requests anywhere in the chain.
 
 **F-13 · Split into a zip of individual per-page PDFs — ✅ DONE (`dd92468`).** From
 [issue #2](https://github.com/sayjavajava/offline-pdf-utility/issues/2): a user expected Split to
