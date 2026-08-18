@@ -13,8 +13,9 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
 - **Split PDF**: Extract specific pages or page ranges from a PDF.
 - **Merge PDF**: Combine multiple PDF documents into a single file.
 - **Unlock PDF**: Remove password protection from an encrypted PDF, given its
-  password. Supports both RC4 and AES encryption. Note that the reverse —
-  *adding* a password to a PDF — is not currently supported.
+  password. Supports both RC4 and AES encryption.
+- **Protect PDF**: Add a password to a PDF, encrypted with AES-256, so only someone who knows
+  it can open the file.
 - **Edit Metadata**: Modify your PDF's title, author, subject, and keywords.
 - **Convert to PDF**: Convert JPEG, PNG, or DOCX files to PDF format.
 - **Add Watermark**: Apply a text watermark to every page of your PDF.

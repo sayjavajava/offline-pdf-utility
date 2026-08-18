@@ -1,8 +1,76 @@
 // @cantoo/pdf-lib rather than upstream pdf-lib: it is an API-compatible fork
 // that implements the standard security handler, so encrypted documents can
 // actually be opened. Upstream has no `password` load option at all.
-import { PDFDocument, degrees } from '@cantoo/pdf-lib';
+import { PDFDocument, PDFRawStream, PDFInvalidObject, PDFName, degrees } from '@cantoo/pdf-lib';
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
+import { encryptPdfBytes } from './qpdf-engine';
+
+/**
+ * Strips leftover cross-reference-stream objects from a loaded document
+ * (P1-17).
+ *
+ * A PDF whose xref table is a compressed stream (PDF 1.5+; qpdf's default,
+ * and common output from modern PDF writers) carries the object as an
+ * ordinary indirect object, same as any page or font. @cantoo/pdf-lib's
+ * parser reads it correctly for its metadata (Root, Info, and critically
+ * Encrypt all get pulled into `context.trailerInfo`) but then *also*
+ * registers the object itself in the document's live object table
+ * (`PDFParser.parseIndirectObject`: `this.context.assign(ref, object)` runs
+ * unconditionally, with no exception for the type it just consumed).
+ *
+ * For an encrypted source, that stray object still carries its own
+ * `/Encrypt` reference in its own dict — untouched by the trailer cleanup a
+ * few lines below, since that only clears `context.trailerInfo.Encrypt`, not
+ * this separate copy. `.save()` serializes every live object, so the stale
+ * object — `/Type /XRef` and all — ends up in the resaved file. A later load
+ * can find that `/Encrypt` and report the file as still encrypted, even
+ * though the genuinely current xref stream (freshly written by this same
+ * save) carries none. No error at any step: `removePdfPassword` reports
+ * success and hands back a file that never actually lost its password.
+ *
+ * Two shapes, both handled:
+ *
+ *  - **Unencrypted source:** the stale object parses cleanly as a
+ *    `PDFRawStream` with `/Type /XRef` in its dict. `/Type /XRef` is
+ *    reserved for cross-reference streams by the PDF spec — no legitimate
+ *    content object can carry it — so deleting every object with that type
+ *    is safe by construction, not a heuristic.
+ *  - **Encrypted source:** the library's decrypt pass re-parses the *entire*
+ *    byte stream through a `CipherTransformFactory`, including the xref
+ *    stream object — which the PDF spec requires to stay in plaintext even
+ *    in an encrypted document, since it is needed to bootstrap decryption in
+ *    the first place. Decrypting bytes that were never encrypted corrupts
+ *    them, the stream fails its internal consistency check, and the object
+ *    degrades to an opaque `PDFInvalidObject` holding the raw, undecrypted
+ *    bytes — confirmed by inspection: `/Type /XRef ... /Encrypt N 0 R` reads
+ *    perfectly plainly inside `.data`. A `PDFRawStream` type check cannot see
+ *    this shape at all, so invalid objects are separately sniffed for the
+ *    same `/Type /XRef` marker in their raw header bytes.
+ */
+function looksLikeXRefStreamObject(object: InstanceType<typeof PDFInvalidObject>): boolean {
+    // `.data` is private to the class; go through its public byte-copy API
+    // instead of reaching past that. `copyBytesInto` always writes its full
+    // size regardless of the buffer offered, so size the buffer to match —
+    // only the header is actually inspected below.
+    const buffer = new Uint8Array(object.sizeInBytes());
+    object.copyBytesInto(buffer, 0);
+    const head = buffer.subarray(0, Math.min(buffer.length, 512));
+    let text = '';
+    for (let i = 0; i < head.length; i++) text += String.fromCharCode(head[i]);
+    return /<<[^>]*\/Type\s*\/XRef\b/.test(text);
+}
+
+function stripStaleXRefStreamObjects(pdfDoc: PDFDocument): void {
+    const { context } = pdfDoc;
+    for (const [ref, object] of context.enumerateIndirectObjects()) {
+        const isXRefStream =
+            (object instanceof PDFRawStream && object.dict.lookup(PDFName.of('Type')) === PDFName.of('XRef')) ||
+            (object instanceof PDFInvalidObject && looksLikeXRefStreamObject(object));
+        if (isXRefStream) {
+            context.delete(ref);
+        }
+    }
+}
 
 /**
  * Loads a PDF, decrypting it when a password is supplied.
@@ -26,7 +94,9 @@ async function loadPdf(file: File, password?: string): Promise<PDFDocument> {
     const supplied = password ?? '';
 
     try {
-        return await PDFDocument.load(bytes, { password: supplied });
+        const pdfDoc = await PDFDocument.load(bytes, { password: supplied });
+        stripStaleXRefStreamObjects(pdfDoc);
+        return pdfDoc;
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
 
@@ -190,6 +260,56 @@ export async function splitPdf(file: File, pages: string, password?: string): Pr
     return new Blob([pdfBytes], { type: 'application/pdf' });
 }
 
+export type SplitPage = {
+    /** 1-based original page number, for filenames and messages. */
+    pageNumber: number;
+    bytes: Uint8Array;
+};
+
+/**
+ * Splits a PDF the same way `splitPdf` does, but returns each selected page
+ * as its own single-page PDF (F-13) instead of one combined file.
+ *
+ * From issue #2: a user expected Split to hand back individual files and
+ * read the single combined output as a bug. It wasn't — `splitPdf` extracts
+ * a page *range* into one document, which is genuinely different from what
+ * this function does. Sharing the exact resolution block above means both
+ * modes agree on what a given range string means and on their error text;
+ * only the packaging differs.
+ *
+ * Packaging (bare file vs. zip) is a UI concern and is left to the caller —
+ * see ExtractImagesTool and PdfToImagesTool for the established pattern.
+ */
+export async function splitPdfToZip(file: File, pages: string, password?: string): Promise<SplitPage[]> {
+    const pdfDoc = await loadPdf(file, password);
+
+    const pageCount = pdfDoc.getPageCount();
+    let pageIndices: number[];
+
+    if (pages.toLowerCase() === 'all') {
+        pageIndices = Array.from({ length: pageCount }, (_, i) => i);
+    } else {
+        const parsed = parsePageRange(pages, pageCount);
+        if (parsed.errors.length > 0) {
+            throw new Error(parsed.errors.join(' '));
+        }
+        pageIndices = parsed.indices;
+    }
+
+    if (pageIndices.length === 0) {
+        throw new Error('Invalid page range specified.');
+    }
+
+    const result: SplitPage[] = [];
+    for (const pageIndex of pageIndices) {
+        const single = await PDFDocument.create();
+        const [copied] = await single.copyPages(pdfDoc, [pageIndex]);
+        single.addPage(copied);
+        result.push({ pageNumber: pageIndex + 1, bytes: await single.save() });
+    }
+    return result;
+}
+
 /**
  * Merges multiple PDF files into a single document.
  * @param files An array of PDF files to merge.
@@ -237,6 +357,34 @@ export async function removePdfPassword(file: File, password?: string): Promise<
     // Re-saving the document without any encryption options effectively removes the password.
     const pdfBytes = await pdfDoc.save();
     return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+/**
+ * Adds password protection to a PDF (F-1) — the counterpart to
+ * removePdfPassword, and the one direction @cantoo/pdf-lib cannot do at all:
+ * it can read encryption but has no SaveOptions for writing it. This goes
+ * through qpdf compiled to WASM instead (see qpdf-engine.ts for how its
+ * binary is loaded without any network access).
+ *
+ * Encrypts with AES-256. The input must not already be encrypted — qpdf
+ * needs its own password to open an encrypted input first, and this tool
+ * does not collect one; the error tells the user to unlock it first instead.
+ *
+ * @param file The PDF file to protect.
+ * @param password The password required to open the protected PDF.
+ * @returns A Blob of the newly encrypted PDF file.
+ */
+export async function protectPdf(file: File, password: string): Promise<Blob> {
+    if (!password) {
+        throw new Error('Enter a password.');
+    }
+    if (password.length < 4) {
+        throw new Error('Use a password of at least 4 characters.');
+    }
+
+    const inputBytes = new Uint8Array(await file.arrayBuffer());
+    const outputBytes = await encryptPdfBytes(inputBytes, password);
+    return new Blob([outputBytes], { type: 'application/pdf' });
 }
 
 /**

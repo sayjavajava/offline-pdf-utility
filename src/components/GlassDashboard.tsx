@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { 
-  Scissors, 
-  Copy, 
-  Edit3, 
-  RefreshCw, 
+import {
+  Scissors,
+  Copy,
+  Edit3,
+  RefreshCw,
   Shield,
+  Lock,
   Sparkles,
   RotateCw,
   ListOrdered,
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { SplitTool } from './tools/SplitTool';
 import { MergeTool } from './tools/MergeTool';
 import { UnlockTool } from './tools/UnlockTool';
+import { ProtectTool } from './tools/ProtectTool';
 import { EditTool } from './tools/EditTool';
 import { AddWatermarkTool } from './tools/AddWatermarkTool';
 import { ConvertTool } from './tools/ConvertTool';
@@ -58,6 +60,12 @@ const pdfTools = [
     title: "Unlock PDF",
     description: "Remove password protection from encrypted PDF files.",
     icon: Shield,
+  },
+  {
+    id: "protect",
+    title: "Protect PDF",
+    description: "Add a password so only someone who knows it can open the file.",
+    icon: Lock,
   },
   {
     id: "watermark",
@@ -146,6 +154,7 @@ export const GlassDashboard = () => {
             {activeTool === 'split' && <SplitTool />}
             {activeTool === 'merge' && <MergeTool />}
             {activeTool === 'unlock' && <UnlockTool />}
+            {activeTool === 'protect' && <ProtectTool />}
             {activeTool === 'edit' && <EditTool />}
             {activeTool === 'convert' && <ConvertTool />}
             {activeTool === 'watermark' && <AddWatermarkTool />}

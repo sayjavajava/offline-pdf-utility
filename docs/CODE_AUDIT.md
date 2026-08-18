@@ -5,7 +5,7 @@
 
 ---
 
-## Status — COMPLETE. Every actionable finding is implemented.
+## Status — every finding in this audit is implemented. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -20,12 +20,13 @@
 | 8 | F-6, F-7 (images), F-9, F-4, F-5 | ✅ done — `121a5a1`, `8d50856`, `f76784e`, `7af39f0` |
 | 8 | F-7 (text) | ✅ done — see the Extract Text tool |
 | — | P2-24 | ✅ done — `f76784e` (operations run in a worker) |
-| 8 | **F-1, F-11** | ⛔ **blocked — measured, not deferred. See below.** |
+| 8 | **F-11** | ⛔ **closed, will not be built — a deliberate product decision. See below.** |
+| 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
+| 8 | F-12 | ✅ done — `4ae3de0` |
+| 8 | F-13 | ✅ done — `dd92468` |
+| — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
-### The two features that cannot be built as specified
-
-Both were attempted and both are blocked by the same property of the product: it
-ships as a single HTML file opened from disk, where the origin is `null`.
+### The one feature that cannot be built as specified
 
 **F-11 · Service worker / PWA — CLOSED, will not be built.** `navigator.serviceWorker.register()`
 is rejected outright here: *"The URL protocol of the current origin ('null') is not supported."*
@@ -39,31 +40,36 @@ to change, every time — trading the guarantee away for a smaller download. The
 cost to apologise for; it is what the guarantee weighs. Do not reopen this without changing the
 product's premise first.
 
-**F-1 · Protect PDF (add a password).** Three independent findings, in order of discovery:
+**F-1 · Protect PDF (add a password) — ✅ DONE (`60b9e85`), reversing this document's own "blocked"
+verdict.** This was previously marked blocked on the claim that `@jspawn/qpdf-wasm`'s loader "does
+not support `wasmBinary`" and therefore could not be inlined into a single-file build. That claim was
+too narrow: the loader does not read a `wasmBinary` config field, but it **does** honor a `locateFile`
+hook, and `fetch()` resolves a `data:` URI locally rather than over the network. Pointing `locateFile`
+at a base64 data URI built from the bundled binary loads and runs the module with **zero network
+requests** — verified directly against the real `file://` build with every non-local request blocked,
+before it was relied on for anything. **Lesson repeated from P0-1: verify the actual hook surface in
+a browser, don't stop at the first API that doesn't exist.**
 
-1. Neither `pdf-lib` nor `@cantoo/pdf-lib` can *write* encryption — `SaveOptions` has no password
-   fields. Confirmed from source.
-2. `@jspawn/qpdf-wasm@0.0.2`, the package this document proposed, **does not support `wasmBinary`**
-   — the string appears nowhere in its loader. It can only `fetch` its 1.22 MB `.wasm` as a sibling
-   file. That cannot be inlined into the single-file build, and fetching a sibling from a `null`
-   origin is blocked — the same failure that broke **P0-1**. The package also ships no API surface
-   beyond the CLI and no usage docs (its README points at a `tests` directory it does not include).
-3. Hand-rolling PDF encryption on top of pdf-lib was considered and rejected. Writing a correct
-   AES-256 (R6) security handler means deriving `/O`, `/U`, `/OE`, `/UE` and `/Perms` and encrypting
-   every string and stream. Getting it subtly wrong produces a file the user *believes* is protected
-   — worse than not offering the feature.
+What shipped: the wasm binary is bundled the same way the pdf.js CMap tables are (generated, not
+committed, deflated before base64 — ~1.22 MB → ~0.41 MB packed) via `scripts/generate-qpdf-wasm.mjs`,
+and the qpdf CLI is driven through its virtual filesystem (`FS.writeFile` / `callMain` / `FS.readFile`
+— it exposes no library API, only the CLI). It only offers AES-256: qpdf's "128" key length maps to
+legacy RC4, which qpdf itself now refuses to write without an extra weak-crypto override. This
+module's success path cannot run under jsdom (Node's `fetch` does not resolve a `data:` URI the way a
+real browser does), so `qpdf-engine.ts` is excluded from unit coverage and instead verified with
+Playwright against the built file — same treatment as `pdf-render.ts`.
 
-**A viable path exists** if this is wanted: a qpdf (or similar) WASM build compiled with Emscripten's
-`wasmBinary` support, letting the binary be inlined as base64. That is a build-and-vendor task, not
-an integration task, and it would add well over a megabyte to a bundle that is already 6.74 MB.
+Verifying the round trip (Protect, then Unlock through the app's own existing tool) surfaced a real,
+**pre-existing** bug in `removePdfPassword` unrelated to anything F-1 added, initially worked around
+here for this tool's own output — then fixed for real at the source, in `loadPdf` itself. See **P1-17**.
 
 **CI was red and is now fixed** (`afb6aa9`). `jsdom@30` requires Node `^22.22.2` but both workflow
 jobs pinned Node 20, so `verify` failed before a single test ran — meaning the gate protecting all
 of this work was not actually running. Both jobs are on Node 22 and `package.json` now declares
 `engines`.
 
-**Everything actionable in this audit is now implemented.** The only open items are F-1 and F-11,
-both blocked for measured reasons set out below rather than for want of effort.
+**Everything actionable in this audit is now implemented.** **F-11** stays closed for the product
+reasons above; **F-12** (real DOCX→PDF text conversion) is done — see below.
 
 ### Worker feasibility on `file://` — measured, not assumed
 
@@ -94,8 +100,9 @@ be a sibling file. Tested in Chromium against the real `dist/index.html` over `f
 - `npm run test` → **181 passing**. `npm run typecheck` → clean under `strict`.
 - `npm run test:coverage` → passes; `src/lib` at **94% lines**. Thresholds are a ratchet set just
   below what the suite achieves — raise them as coverage improves, never lower them to go green.
-  `pdf-render.ts`, `docx-convert.ts` and `pdf.worker.ts` are excluded because they cannot execute
-  under jsdom at all; the Playwright checks cover them.
+  `pdf-render.ts`, `pdf.worker.ts`, and `qpdf-engine.ts` are excluded because they cannot execute
+  under jsdom at all; the Playwright checks cover them. (`docx-convert.ts` used to be excluded for
+  the same reason — needing `html2canvas` and a live DOM — but no longer exists: see **F-12**.)
 - `npm run lint` → **0 errors, 1 warning** (react-refresh on button variants).
 - `npm run build` → single self-contained `dist/index.html` (~6.74 MB; pdf.js is the largest
   single contributor, then the inlined PDF worker, then the bundled CMap tables).
@@ -129,7 +136,7 @@ one to that module made unrelated tool tests fail with a misleading assertion di
 `importOriginal()` and overrides only the side-effecting helpers. **Prefer that pattern** for any
 new module mock.
 
-### Two corrections to this document
+### Three corrections to this document
 
 **P0-1 was under-diagnosed.** It blamed `BrowserRouter` alone. After fixing that, the page still
 rendered **completely blank** from `file://`: a page opened from disk has a `null` origin, and Vite
@@ -148,6 +155,11 @@ then the acceptance test caught a **fourth** shape the probe missed. All four ar
 | no password option | `EncryptedPDFError` |
 | **empty password vs. a real-password file** | **`NEEDS PASSWORD`** ← missed by inspection |
 | corrupt file | `MissingPDFHeaderError` (rethrown untouched) |
+
+**F-1 was marked blocked on an incomplete API check.** See the correction above, under F-1 itself:
+the loader's `locateFile` hook was never tried, only the absence of a `wasmBinary` field was. The
+lesson is the same one P0-1 already taught this document — verify the real surface in a browser
+before writing "cannot be done."
 
 ### What already exists — reuse it, don't rebuild it
 
@@ -173,9 +185,19 @@ then the acceptance test caught a **fourth** shape the probe missed. All four ar
   the wrong pages.
 - **Encrypted fixtures** are committed (RC4-128, AES-256, empty-password) and regenerated by
   `scripts/generate-encrypted-fixtures.py`. The **T-2 blocker this document flagged is resolved.**
-- `protectPdf` is now **`removePdfPassword`**. `mergePdf` routes through `loadPdf` and names the
-  failing file (**P1-12**). `parsePageRange` is exported and order-preserving (**P1-6**/**P1-7**).
-- New tools: **`rotatePdf`** (**F-2**), **`rearrangePdf`** (**F-3**).
+- The original `protectPdf` (which despite its name only *removed* protection) is now
+  **`removePdfPassword`**. **`protectPdf` has since been reused for a genuinely new function** that
+  does the opposite — adds a password (**F-1**) — do not confuse the two by name alone.
+  `mergePdf` routes through `loadPdf` and names the failing file (**P1-12**). `parsePageRange` is
+  exported and order-preserving (**P1-6**/**P1-7**).
+- New tools: **`rotatePdf`** (**F-2**), **`rearrangePdf`** (**F-3**), **`protectPdf`** (**F-1**, via
+  `qpdf-engine.ts` — see **What already exists** below).
+- **`src/lib/qpdf-engine.ts`** — qpdf-via-WASM encryption (**F-1**). Only exposes one function,
+  `encryptPdfBytes`; cannot run under jsdom (see the coverage exclude in `vite.config.ts`), verify
+  with Playwright against the built file instead.
+- **`src/lib/inflate.ts`** — the `DecompressionStream`-based inflate helper, shared by the bundled
+  CMap tables (`pdf-render.ts`) and the bundled qpdf binary (`qpdf-engine.ts`). Extracted during
+  **F-1**; do not re-duplicate it a third time.
 
 ---
 
@@ -202,7 +224,7 @@ operations entirely client-side — nothing is uploaded. Substantially all logic
 
 | File | Role |
 |---|---|
-| `src/lib/pdf-utils.ts` | **All** PDF logic over `@cantoo/pdf-lib`, `mammoth`, `html2pdf.js`. |
+| `src/lib/pdf-utils.ts` | **All** PDF logic over `@cantoo/pdf-lib`, `mammoth`, `pdfjs-dist`, qpdf (WASM). |
 | `src/lib/download.ts` | Shared download / filename / error-toast helpers. |
 | `src/lib/file-validation.ts` | PDF magic/extension checks + large-file warning. |
 | `src/components/tools/*.tsx` | One form component per tool (8 tools). |
@@ -232,10 +254,10 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | | Found | Still open | Meaning |
 |---|---|---|---|
 | **P0** | 5 | **0** | Broken and user-visible. |
-| **P1** | 11 | **0** | Wrong behaviour, misleading errors, silent failures. |
+| **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 11 | **1** (F-1) | Additive features. F-2–F-10 done; F-11 closed as incompatible. |
+| **F** | 13 | **0** | Additive features. F-1–F-10, F-12, F-13 done; F-11 closed as incompatible. |
 
 ### The three that mattered most — all now fixed
 
@@ -770,6 +792,70 @@ user:
 **Accept:** convert a multi-page DOCX with a table — output is A4, has margins, no row is sliced
 mid-height, and the UI shows the rasterization notice.
 
+**Superseded by F-12.** The rasterizing pipeline this finding improved (margins, page sizing, the UI
+warning) was later replaced entirely with a text-based one — see **F-12** below. `html2pdf.js` and the
+rasterization notice described here no longer exist.
+
+### P1-17 · `removePdfPassword` silently fails to decrypt a PDF whose xref is a compressed stream — ✅ DONE (`b4ace14`)
+
+**Found while verifying F-1's round trip** (Protect → Unlock through the app's own two tools), not
+from a report. `removePdfPassword` (`loadPdf` + `pdfDoc.save()`, unchanged since **P0-3**) reported
+success and downloaded a file — but the file was **still encrypted**. Reproduced directly, no app UI
+involved:
+
+```
+doc = PDFDocument.load(bytes, { password })   // isEncrypted → false, content readable
+saved = doc.save()
+reloaded = PDFDocument.load(saved, { ignoreEncryption: true })
+reloaded.isEncrypted → true                    // the save did not actually strip it
+```
+
+**Root cause, isolated by reading the parser, not by guessing:** a PDF whose cross-reference table is
+a **compressed xref stream** (PDF 1.5+; qpdf's default, and common output from many modern PDF
+writers) stores that xref stream as an ordinary indirect object, same as any page or font.
+`PDFParser.parseIndirectObject` reads it correctly for its metadata — Root, Info, and critically
+Encrypt all get pulled into `context.trailerInfo` — but then *unconditionally* registers the object
+itself in the document's live object table too (`this.context.assign(ref, object)`, no exception for
+the type it just consumed). That stray object still carries its own `/Encrypt` reference in its own
+dict, untouched by the trailer cleanup (which only clears `context.trailerInfo.Encrypt`, a separate
+copy). `.save()` serializes every live object, so the stale one — `/Type /XRef` and all — ends up in
+the resaved file, and a later load can find that `/Encrypt` and report the file as still encrypted.
+
+There are two shapes this takes, both handled by the fix:
+- **Unencrypted source:** the stray object parses cleanly as a `PDFRawStream` with `/Type /XRef` in
+  its dict.
+- **Encrypted source:** pdf-lib's decrypt pass *re-parses the entire byte stream* through a
+  `CipherTransformFactory`, including the xref stream — which the PDF spec requires to stay
+  plaintext, since it bootstraps decryption in the first place. Decrypting bytes that were never
+  encrypted corrupts them, the object fails its internal parse, and it degrades to an opaque
+  `PDFInvalidObject` holding the raw, undecrypted bytes. Confirmed by inspection: `/Type /XRef ...
+  /Encrypt N 0 R` reads perfectly plainly inside those raw bytes — a `PDFRawStream`-shaped check alone
+  cannot see this variant at all.
+
+**Consequence (before the fix):** any PDF encrypted with a tool that emits a compressed xref stream —
+not just this app's own **F-1** — failed Unlock silently: no error, a "Success!" toast, a file that
+downloaded fine, and was still password protected. This predated F-1; F-1 only surfaced it by being
+the first thing in this codebase to produce that xref shape.
+
+**Fixed at the source**, in `loadPdf` (`pdf-ops.ts`) — the single load path every tool shares:
+`stripStaleXRefStreamObjects` deletes any indirect object shaped like a cross-reference stream after
+load, in both forms above (`/Type /XRef` is reserved for xref streams by the PDF spec, so this is
+safe by construction, not a heuristic). `qpdf-engine.ts`'s `--object-streams=disable` workaround —
+shipped with F-1 as a stopgap for this app's own output — was removed once the real fix landed; qpdf
+now runs with its own defaults, and the Protect → Unlock round trip was re-verified against the real
+built app with every non-local request blocked, producing genuinely compressed-xref output that
+decrypts cleanly.
+
+**Pinned by a new committed fixture**, `encrypted-aes-256-xrefstream.pdf` (pdf-lib cannot write
+encryption at all, so — like the other encrypted fixtures — this had to be generated once and
+committed; this one specifically needed qpdf itself to reproduce the compressed-xref shape, since the
+Python/pypdf generator behind the other three does not emit it). Confirmed to fail without the fix
+and pass with it before committing either.
+
+**Accept:** `removePdfPassword` on a compressed-xref-stream encrypted PDF genuinely decrypts it —
+verified both by unit test (`pdf-utils.test.ts`) and by a real-browser round trip through the app's
+own Protect and Unlock tools.
+
 ---
 
 ## 3. P2 — Code health and infrastructure
@@ -1098,6 +1184,76 @@ register from `file://` (measured — see the worker findings in the status bloc
 primary distribution mode. This needs a second hosted build target to mean anything, which is a
 product decision. Original rationale follows: makes a *hosted* deployment work offline after first load, and
 gives installability. Complements **P0-2**, which fixes the `file://` case.
+
+**F-12 · Real, text-based DOCX→PDF conversion — ✅ DONE (`4ae3de0`).** Raised by a tester on `v0.1.0`:
+`convertDocxToPdf` still rasterized, exactly as **P1-16** described and only partially mitigated. The
+old pipeline was `mammoth` → HTML → `html2pdf.js` (`html2canvas` + `jsPDF`), which embedded a
+**picture** of the page as the PDF content — no selectable, searchable, or copyable text, which is the
+actual reason most people convert a document to PDF.
+
+**Chosen approach: hand-rolled layout on `@cantoo/pdf-lib`** (`src/lib/docx-layout.ts`), the
+"preferred default" this document named — `pdfmake`, the other candidate, was checked rather than
+assumed: it pulls in `pdfkit` (a whole second PDF engine) at 15 MB unpacked, pure duplication of what
+`@cantoo/pdf-lib` already does in this bundle, on top of a translation-layer risk from mammoth's HTML
+to pdfmake's `docDefinition` JSON. Hand-rolling draws real text objects the same way `addWatermark` and
+`addPageNumbers` already do — DOM-walk mammoth's HTML into a small block model (headings, paragraphs
+with bold/italic/link runs, ordered/unordered lists with nesting, simple tables, block images), then
+lay those blocks out onto A4 pages with greedy word-wrapping against real font metrics.
+
+**Scope, matching what mammoth's HTML actually emits** (verified against real mammoth output, not
+guessed): headings, paragraphs, bold/italic runs, lists, simple tables, and images embedded as `data:`
+URIs. Deliberately not supported, and not silently faked — see `docx-layout.ts`'s module docstring:
+only the four standard Helvetica variants are used (a character outside WinAnsi — CJK, Cyrillic, emoji
+— is replaced with `?` and counted in a non-blocking warning, never silently dropped); links render
+styled but are not clickable (no PDF Link annotation); a table row that doesn't fit the remaining page
+moves to a new page as a whole rather than splitting.
+
+**A real mistake, caught before it shipped, not after:** since nothing in the new pipeline needs
+`html2canvas` or a live DOM to render into (mammoth needs no DOM at all; the layout engine only uses
+`DOMParser`), the plan was to route it through the PDF worker (**F-9**) for the same off-main-thread
+benefit every other tool gets. `DOMParser` is *not*, in fact, available in a dedicated Worker's global
+scope in Chromium — confirmed by actually running it there and getting `DOMParser is not defined`.
+jsdom emulates one, which is exactly why this looked worker-safe under the unit tests and only failed
+once Playwright drove it end to end against a real browser. **The same class of mistake this document
+has hit before** (P0-1, and F-1's own "blocked" correction) — a Node/jsdom-only assumption stated as
+fact. Reverted to the main thread, the same boundary the old pipeline used, now for a different reason;
+documented in `docx-convert.ts` so a future change doesn't retry it without testing for real first.
+
+**Bonus: the bundle got smaller, not bigger.** Removing `html2pdf.js` and its dependents (`html2canvas`,
+`jsPDF` — 22 packages) outweighed the new layout code, and moving conversion out of `pdf-ops.ts` (it
+never actually ran through the worker) stopped it being duplicated into the worker bundle too.
+
+**Accept, verified for real, not by eyeballing the render:** converted a real DOCX (heading, a
+bold/italic run, nested bullet and numbered lists, a table, accented Latin text) through the actual
+built `file://` app with every non-local request blocked, then fed the resulting PDF into this app's
+own **Extract Text** tool — the exact check this document specified — and got the genuine document
+text back, correctly structured, with zero network requests anywhere in the chain.
+
+**F-13 · Split into a zip of individual per-page PDFs — ✅ DONE (`dd92468`).** From
+[issue #2](https://github.com/sayjavajava/offline-pdf-utility/issues/2): a user expected Split to
+produce one PDF per page in a zip, and reported the single-combined-file result as a bug. It wasn't
+— re-verified against the `v0.1.0` release with a byte comparison, not just a page count: `all` and
+`1, 2, 3` on a 3-page document each produce a genuinely new, re-saved file that happens to contain
+every page, which is why it looked unchanged. Closed as not-a-bug. But the idea underneath — export
+each selected page as its own file — is a real, missing mode, and it's cheap now:
+
+- **The zip writer already exists and is proven.** `src/lib/zip.ts` (STORE method, no compression,
+  hand-rolled because the payloads are already-compressed PDF bytes) is already used by
+  **Extract Images** and **PDF to Images**. This is a third caller, not new infrastructure.
+- **The page selection already exists.** `parsePageRange` — order-preserving, duplicate-preserving
+  since **P1-7** — already resolves exactly the set this needs.
+- **The only new code** is: for each resolved page index, `copyPages` + `addPage` into its own
+  single-page `PDFDocument`, `save()`, and add it to the zip as `page-NNN.pdf` — the same per-page
+  loop shape `renderPdfPages` already uses, just producing a PDF page instead of a PNG.
+
+**Where it lives:** either a toggle on the existing `SplitTool` ("download as separate files"), or a
+`splitPdfToZip` function alongside `splitPdf` in `pdf-ops.ts` so it runs through the worker like every
+other operation (**F-9**). Prefer the toggle — it's the same tool, same inputs, just a different
+output shape, and a second tool for this would just be Split with extra steps.
+
+**Accept:** splitting a 3-page PDF for "all" with the new mode on produces a zip containing exactly 3
+single-page PDFs, each opening independently with the right content — proven the same way **T-4**
+proves page identity (via `pageIndicesOf`, not just a page count).
 
 ---
 

@@ -20,6 +20,7 @@ export type {
   PageNumberFormat,
   PageNumberOptions,
   PageNumberPosition,
+  SplitPage,
 } from './pdf-ops';
 export type { ExtractedImage, ExtractImagesResult } from './image-extract';
 
@@ -55,9 +56,11 @@ async function run<K extends keyof typeof ops>(
 }
 
 export const splitPdf = (...a: Parameters<typeof ops.splitPdf>) => run('splitPdf', a);
+export const splitPdfToZip = (...a: Parameters<typeof ops.splitPdfToZip>) => run('splitPdfToZip', a);
 export const mergePdf = (...a: Parameters<typeof ops.mergePdf>) => run('mergePdf', a);
 export const removePdfPassword = (...a: Parameters<typeof ops.removePdfPassword>) =>
   run('removePdfPassword', a);
+export const protectPdf = (...a: Parameters<typeof ops.protectPdf>) => run('protectPdf', a);
 export const editPdfMetadata = (...a: Parameters<typeof ops.editPdfMetadata>) =>
   run('editPdfMetadata', a);
 export const convertImageToPdf = (...a: Parameters<typeof ops.convertImageToPdf>) =>
@@ -70,7 +73,8 @@ export const addPageNumbers = (...a: Parameters<typeof ops.addPageNumbers>) =>
 export const extractImages = (...a: Parameters<typeof ops.extractImages>) => run('extractImages', a);
 
 /**
- * DOCX conversion stays on the main thread: it renders HTML through
- * html2canvas, which needs a DOM the worker does not have.
+ * DOCX conversion stays on the main thread: docx-layout.ts's HTML parsing
+ * needs `DOMParser`, which is not available in a dedicated Worker's global
+ * scope (confirmed in a real browser — see docx-convert.ts).
  */
 export const convertDocxToPdf = convertDocxToPdfImpl;

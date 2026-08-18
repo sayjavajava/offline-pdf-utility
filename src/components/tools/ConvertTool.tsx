@@ -57,7 +57,8 @@ export const ConvertTool = () => {
       <h2 className="text-2xl font-bold">Convert to PDF</h2>
       <p className="text-sm text-muted-foreground">Convert JPEG, PNG, or DOCX files to PDF.</p>
       <p className="text-sm text-muted-foreground">
-        DOCX conversion renders pages as images; text in the output will not be selectable.
+        DOCX text comes out selectable and searchable. Complex formatting (styles, precise
+        spacing) is simplified; links are shown but are not clickable.
       </p>
       <FilePicker
         files={files}

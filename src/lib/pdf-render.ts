@@ -13,6 +13,7 @@
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import PdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline';
 import { PACKED_CMAPS } from './pdf-cmaps.generated';
+import { inflateDeflated } from './inflate';
 
 /**
  * Supplies pdf.js's predefined CMap tables from the bundle instead of fetching
@@ -30,7 +31,7 @@ export async function loadBundledCMap(filename: string): Promise<Uint8Array> {
   const packed = PACKED_CMAPS[filename.replace(/\.bcmap$/, '')];
   if (!packed) throw new Error(`No bundled CMap named "${filename}".`);
   const bytes = Uint8Array.from(atob(packed), (c) => c.charCodeAt(0));
-  return inflate(bytes);
+  return inflateDeflated(bytes);
 }
 
 class InlineBinaryDataFactory {
@@ -44,32 +45,6 @@ class InlineBinaryDataFactory {
 
     return loadBundledCMap(filename);
   }
-}
-
-/** Inflate without Blob.stream()/Response.body, neither of which jsdom provides. */
-async function inflate(bytes: Uint8Array): Promise<Uint8Array> {
-  const source = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.close();
-    },
-  });
-  const reader = source.pipeThrough(new DecompressionStream('deflate')).getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    total += value.length;
-  }
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, at);
-    at += chunk.length;
-  }
-  return out;
 }
 
 /**

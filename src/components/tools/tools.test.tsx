@@ -35,8 +35,10 @@ vi.mock("@/lib/download", async (importOriginal) => ({
 }));
 
 const splitPdf = vi.fn();
+const splitPdfToZip = vi.fn();
 const mergePdf = vi.fn();
 const removePdfPassword = vi.fn();
+const protectPdf = vi.fn();
 const editPdfMetadata = vi.fn();
 const addWatermark = vi.fn();
 const convertImageToPdf = vi.fn();
@@ -48,8 +50,10 @@ vi.mock("@/lib/pdf-utils", async () => {
   return {
     ...actual,
     splitPdf: (...args: unknown[]) => splitPdf(...args),
+    splitPdfToZip: (...args: unknown[]) => splitPdfToZip(...args),
     mergePdf: (...args: unknown[]) => mergePdf(...args),
     removePdfPassword: (...args: unknown[]) => removePdfPassword(...args),
+    protectPdf: (...args: unknown[]) => protectPdf(...args),
     editPdfMetadata: (...args: unknown[]) => editPdfMetadata(...args),
     addWatermark: (...args: unknown[]) => addWatermark(...args),
     convertImageToPdf: (...args: unknown[]) => convertImageToPdf(...args),
@@ -61,6 +65,7 @@ vi.mock("@/lib/pdf-utils", async () => {
 import { SplitTool } from "./SplitTool";
 import { MergeTool } from "./MergeTool";
 import { UnlockTool } from "./UnlockTool";
+import { ProtectTool } from "./ProtectTool";
 import { EditTool } from "./EditTool";
 import { AddWatermarkTool } from "./AddWatermarkTool";
 import { ConvertTool } from "./ConvertTool";
@@ -71,8 +76,10 @@ beforeEach(() => {
   derivedName.mockClear();
   reportToolError.mockClear();
   splitPdf.mockReset();
+  splitPdfToZip.mockReset();
   mergePdf.mockReset();
   removePdfPassword.mockReset();
+  protectPdf.mockReset();
   editPdfMetadata.mockReset();
   addWatermark.mockReset();
   convertImageToPdf.mockReset();
@@ -178,6 +185,46 @@ describe("SplitTool (T-10)", () => {
       expect(screen.queryByText(/selected file:/i)).not.toBeInTheDocument();
     });
   });
+
+  it("calls splitPdfToZip instead of splitPdf when 'separate files' is checked (F-13)", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(3, "report.pdf");
+    splitPdfToZip.mockResolvedValue([
+      { pageNumber: 1, bytes: new Uint8Array([1]) },
+      { pageNumber: 2, bytes: new Uint8Array([2]) },
+    ]);
+    render(<SplitTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/pages to extract/i), "1,2");
+    await user.click(screen.getByLabelText(/download as separate files/i));
+    await user.click(screen.getByRole("button", { name: /split pdf/i }));
+
+    await waitFor(() => expect(splitPdfToZip).toHaveBeenCalledWith(file, "1,2", ""));
+    expect(splitPdf).not.toHaveBeenCalled();
+    expect(downloadBlob).toHaveBeenCalled();
+    // Zipped, so the download uses the derived-name helper rather than a bare filename.
+    expect(derivedName).toHaveBeenCalledWith(file.name, "_split", "zip");
+  });
+
+  it("downloads a bare PDF, not a zip, when only one page is selected in separate-files mode", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(3, "report.pdf");
+    splitPdfToZip.mockResolvedValue([{ pageNumber: 2, bytes: new Uint8Array([9]) }]);
+    render(<SplitTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/pages to extract/i), "2");
+    await user.click(screen.getByLabelText(/download as separate files/i));
+    await user.click(screen.getByRole("button", { name: /split pdf/i }));
+
+    await waitFor(() => expect(splitPdfToZip).toHaveBeenCalledWith(file, "2", ""));
+    expect(derivedName).not.toHaveBeenCalled();
+    expect(downloadBlob).toHaveBeenCalledWith(
+      expect.any(Blob),
+      expect.stringContaining("page-002.pdf"),
+    );
+  });
 });
 
 describe("MergeTool (T-10 / P1-13)", () => {
@@ -244,6 +291,69 @@ describe("UnlockTool (T-10)", () => {
     await user.click(screen.getByRole("button", { name: /remove protection/i }));
     await waitFor(() =>
       expect(reportToolError).toHaveBeenCalledWith(toastSpy, "Error removing protection", "boom"),
+    );
+  });
+});
+
+describe("ProtectTool (F-1)", () => {
+  it("calls protectPdf with the typed password when both fields match", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(1, "plain.pdf");
+    protectPdf.mockResolvedValue(new Blob(["x"]));
+    render(<ProtectTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/^password$/i), "secret123");
+    await user.type(screen.getByLabelText(/confirm password/i), "secret123");
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+
+    await waitFor(() => expect(protectPdf).toHaveBeenCalledWith(file, "secret123"));
+    expect(downloadBlob).toHaveBeenCalled();
+  });
+
+  it("guards on a password mismatch and never calls protectPdf", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(1, "plain.pdf");
+    render(<ProtectTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/^password$/i), "secret123");
+    await user.type(screen.getByLabelText(/confirm password/i), "different");
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Passwords do not match", variant: "destructive" }),
+    );
+    expect(protectPdf).not.toHaveBeenCalled();
+  });
+
+  it("guards when no file is selected and never calls protectPdf", async () => {
+    const user = userEvent.setup();
+    render(<ProtectTool />);
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "No file selected", variant: "destructive" }),
+    );
+    expect(protectPdf).not.toHaveBeenCalled();
+  });
+
+  it("surfaces protectPdf's rejection message, e.g. an already-encrypted input", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(1, "plain.pdf");
+    protectPdf.mockRejectedValue(new Error("This PDF already has a password."));
+    render(<ProtectTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/^password$/i), "secret123");
+    await user.type(screen.getByLabelText(/confirm password/i), "secret123");
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+
+    await waitFor(() =>
+      expect(reportToolError).toHaveBeenCalledWith(
+        toastSpy,
+        "Error protecting PDF",
+        expect.objectContaining({ message: "This PDF already has a password." }),
+      ),
     );
   });
 });
@@ -328,7 +438,7 @@ describe("ConvertTool (T-10)", () => {
     await user.click(screen.getByRole("button", { name: /convert to pdf/i }));
 
     await waitFor(() => expect(convertImageToPdf).toHaveBeenCalledWith(file));
-    expect(screen.getByText(/renders pages as images/i)).toBeInTheDocument();
+    expect(screen.getByText(/selectable and searchable/i)).toBeInTheDocument();
   });
 
   it("still toasts on non-Error rejection (P0-5)", async () => {

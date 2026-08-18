@@ -53,8 +53,8 @@ export default defineConfig(({ mode }) => ({
       // to move a number.
       exclude: [
         "src/lib/pdf-render.ts", // pdf.js: needs a canvas and a live worker
-        "src/lib/docx-convert.ts", // html2canvas: needs a DOM renderer
         "src/lib/pdf.worker.ts", // worker entry: no Worker in jsdom
+        "src/lib/qpdf-engine.ts", // qpdf-wasm: Node's fetch cannot load a data: URI the way a browser does
       ],
       // A ratchet, not an aspiration: these sit just below what the suite
       // currently achieves, so a regression fails the build. Raise them as
