@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every finding in this audit is implemented. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented. Open backlog items: **F-14, F-15, F-16, F-17** — written up for later implementation, not started. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -24,6 +24,8 @@
 | 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
 | 8 | F-12 | ✅ done — `4ae3de0` |
 | 8 | F-13 | ✅ done — `dd92468` |
+| 9 | **F-14, F-15, F-17** | ⬜ **open — written up, not started. See below.** |
+| 9 | **F-16** | ⬜ **open — needs a real spike; initial evidence discourages the obvious approach. See below.** |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
 ### The one feature that cannot be built as specified
@@ -68,8 +70,9 @@ jobs pinned Node 20, so `verify` failed before a single test ran — meaning the
 of this work was not actually running. Both jobs are on Node 22 and `package.json` now declares
 `engines`.
 
-**Everything actionable in this audit is now implemented.** **F-11** stays closed for the product
-reasons above; **F-12** (real DOCX→PDF text conversion) is done — see below.
+**Everything originally scoped in this audit is implemented.** **F-11** stays closed for the product
+reasons above. **F-14–F-17** are a later addition: backlog features written up for future
+implementation, not yet started — see below.
 
 ### Worker feasibility on `file://` — measured, not assumed
 
@@ -257,7 +260,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 13 | **0** | Additive features. F-1–F-10, F-12, F-13 done; F-11 closed as incompatible. |
+| **F** | 17 | **4** (F-14, F-15, F-16, F-17) | Additive features. F-1–F-10, F-12, F-13 done; F-11 closed as incompatible; F-14–F-17 written up, not started. |
 
 ### The three that mattered most — all now fixed
 
@@ -1254,6 +1257,165 @@ output shape, and a second tool for this would just be Split with extra steps.
 **Accept:** splitting a 3-page PDF for "all" with the new mode on produces a zip containing exactly 3
 single-page PDFs, each opening independently with the right content — proven the same way **T-4**
 proves page identity (via `pageIndicesOf`, not just a page count).
+
+**F-14 · Compress / optimize a PDF — open, scoped below.** Reduces file size, mainly by
+recompressing embedded images — a real, common request, and one this app can do with **no new
+dependency**: qpdf (`qpdf-engine.ts`, already bundled for **F-1**) supports it directly.
+
+**Technical basis (from `qpdf --help=all`, not assumed):**
+- `--optimize-images` recompresses images as JPEG when that comes out smaller, subject to
+  `--oi-min-width` / `--oi-min-height` / `--oi-min-area` thresholds — skip images too small for the
+  format-conversion overhead to be worth it.
+- `--recompress-flate --compression-level=9` uncompresses and recompresses already-flate-compressed
+  content streams at maximum ratio (`--compress-streams=y`, already qpdf's default, only compresses
+  streams that are currently *uncompressed*, so this second flag is what actually re-squeezes them).
+- `--object-streams=generate` compacts the xref/object tables — this produces the compressed-xref
+  shape **P1-17** fixed `loadPdf` to handle safely, so it's fine to use; no need to route around it
+  the way **F-1** originally (and unnecessarily) did before that fix existed.
+
+**Caveats to disclose, not silently absorb:**
+- `--optimize-images` is lossy for any image it re-encodes as JPEG. Say so in the UI rather than
+  quietly degrading photos — same principle as **P0-4**'s "don't silently substitute" and **F-12**'s
+  documented WinAnsi limitation.
+- This will not meaningfully shrink a typical text-only PDF — flate-compressed text is already
+  efficient. The real payoff is image-heavy documents (scans, photos). Show a before/after size in
+  the UI so the user can judge whether it helped, rather than promising a result it may not deliver.
+- Not a full "print production" optimizer — no font subsetting, no resource deduplication. Scope is
+  image recompression + stream recompression only; say that plainly rather than overselling it as
+  general PDF optimization.
+
+**Accept:** a PDF with a large embedded photo compresses to meaningfully fewer bytes with
+`--optimize-images`, and the page count and image legibility survive the round trip (embed
+dimensions unchanged, image still decodes) — verified by size comparison plus a reload, not just a
+successful exit code.
+
+**F-15 · Crop / resize pages — open, scoped below.** Two genuinely different operations sharing one
+UI — verified directly from `@cantoo/pdf-lib`'s `PDFPage.ts` source, because the naive version of
+this is easy to get wrong (see below):
+
+- **Crop:** `page.setCropBox(x, y, width, height)`. Sets the *visible* window to a subregion of the
+  page; the underlying content and MediaBox are untouched. Non-destructive — this is what "crop"
+  means to a user (trim margins, hide a header/footer) without discarding or moving anything.
+- **Resize:** must use `page.scale(x, y)`, **not** `page.setSize(width, height)`. Read from source,
+  not guessed: `setSize` only rewrites the page's box dimensions (`setMediaBox`, and `setCropBox`/
+  `setBleedBox`/`setTrimBox`/`setArtBox` *if* they currently match the MediaBox) — it never touches
+  content coordinates. Shrinking a page with `setSize` alone just **clips** existing content (the
+  same visual effect as an accidental crop); enlarging leaves content anchored at its original
+  position with blank space added around it. `scale(x, y)` is the one that actually transforms
+  content and annotations proportionally (`scaleContent`/`scaleAnnotations` internally) along with
+  the box — that is what "resize" has to mean here, or the feature silently produces wrong output
+  that only shows up when someone actually looks at the result.
+
+**Design decision to make explicitly, not by default-arg accident:** "resize to a paper size" should
+scale-to-fit preserving aspect ratio (`factor = min(targetW/currentW, targetH/currentH)`, uniform,
+centered) rather than stretching non-uniformly (`xScale != yScale`) — stretching visibly distorts
+text and images. Make scale-to-fit the default; if a stretch mode is offered at all, it should be a
+clearly-labelled secondary option, not the default behaviour.
+
+**UI scope for v1:** numeric margins (points or inches, one per side) for Crop — a visual drag-select
+crop box needs a page-preview canvas, which is materially more UI work and can be a later
+enhancement, not a blocker for v1. A paper-size dropdown (A4/Letter/Legal/custom) for Resize.
+
+**Accept:** cropping by a fixed margin leaves content pixel-identical but reduces the visible
+`CropBox` by the expected amount (verified via `getCropBox()` after reload, not just that *a* box
+changed); resizing to A4 with scale-to-fit produces content that is proportionally scaled and
+centered — verified by checking a known reference point's coordinates moved by the expected scale
+factor, not merely that the MediaBox now reads A4 dimensions.
+
+**F-16 · Repair a damaged PDF — open, needs a real spike first; initial evidence is discouraging.**
+The obvious assumption — qpdf is purpose-built for this, wire it up — **did not survive testing**,
+and this section exists specifically so that assumption doesn't get re-made without re-checking it.
+
+**What was actually tested:** four corrupted variants of the same source PDF, built and checked
+directly (not from documentation) against both this app's current `loadPdf` (`@cantoo/pdf-lib`) and
+qpdf's default recovery (`qpdf in.pdf out.pdf`; qpdf's error recovery is on by default —
+`--suppress-recovery` is what turns it *off*):
+
+| Corruption | `loadPdf` today | qpdf default recovery |
+|---|---|---|
+| `startxref` missing entirely (severe truncation) | fails | **also fails** — `can't find startxref` |
+| `startxref` present, points past EOF; compressed xref **stream** | **recovers on its own** | **fails** — `expected n n obj` |
+| Same corruption, classic xref **table** | **recovers on its own** | not re-tested against qpdf in this spike |
+| Corrupted `/Length` on a content stream | **recovers on its own** | not re-tested against qpdf in this spike |
+
+The one directly-comparable case found **qpdf's repair worse than what this app's `loadPdf` already
+tolerates today, for free, with no new code** — the opposite of the assumption this finding started
+from. `@cantoo/pdf-lib` turns out to already have real fallback recovery for bad xref offsets; qpdf's
+default recovery, at least for the xref-stream shape, does not reach as far.
+
+**What a real spike needs before this is scoped as a feature:** damaged files sourced from something
+real — bug reports against other PDF tools, or files with genuine corruption from an interrupted
+download or disk fault, not more synthetic ones like the table above — to find an actual case where
+`loadPdf` fails **and** qpdf (default recovery, or another mode not yet tried, such as forcing a full
+linear object scan) succeeds. Until a case like that is found and confirmed, do not implement this as
+"route damaged files through qpdf" on the strength of qpdf's own documentation alone.
+
+**Fallback scope if the spike comes up empty:** a much smaller, safer **Diagnose** tool instead of
+"Repair" — run `--check` (read-only; qpdf's own words: *"does not perform any validation of the
+actual PDF page content or semantic correctness... merely checks that the PDF file is syntactically
+valid"*; exit 0 clean / 2 errors / 3 warnings-only) and show the user qpdf's structural report.
+`@cantoo/pdf-lib` has no equivalent diagnostic output of its own — it only throws or succeeds. This
+has real, honest value (tell a user *why* their PDF won't open) without promising a fix that may not
+exist.
+
+**Accept:** either (a) qpdf genuinely repairs a real damaged file `loadPdf` cannot open today,
+verified by successfully reading content back out of the repaired file afterward — not just a clean
+exit code — or (b) if the spike finds no such case, ship `--check` alone as a read-only diagnostic
+and record here why "repair" was dropped in favor of "diagnose."
+
+**F-17 · Permissions on Protect PDF — open, scoped below.** `qpdf --help=encryption` (verified, not
+assumed) supports real restriction flags at the 256-bit strength **F-1** already uses:
+`--print=[none|low|full]`, `--modify=[none|assembly|form|annotate|all]`, `--extract=[y|n]`
+(copy/extract text and graphics), `--annotate=[y|n]` (commenting/filling forms), `--assemble=[y|n]`,
+`--form=[y|n]`, `--modify-other=[y|n]`, `--accessibility=[y|n]` (usually ignored by readers),
+`--cleartext-metadata`.
+
+**The design point this finding has to lead with, verified empirically, not assumed:** restrictions
+are enforced (by compliant readers) only for whoever opens the document with the **user** password —
+anyone who supplies the **owner** password gets full, unrestricted access regardless of the flags.
+Protect PDF today (`qpdf-engine.ts`) uses **the same password for both** (`--encrypt password
+password 256`), which means bolting restriction checkboxes onto the existing single-password field
+would ship something that *looks* like it works and **does nothing** — the one password anyone types
+is the owner password, so they always get full access no matter what's checked. This is exactly the
+"looks like success, silently does nothing" failure shape this audit has flagged repeatedly elsewhere
+(P0-5, P1-17); it would be a new instance of it, introduced on purpose, if shipped this way.
+
+Permissions therefore needs a genuine **two-password model**, not an addition to the current one:
+- **Open password** (user password) — required to open the document at all. Can be left empty — a
+  real, common pattern ("anyone can open it, but can't print or copy without the permissions
+  password").
+- **Permissions password** (owner password) — required to bypass the restrictions. Must differ from
+  the open password or the restrictions do nothing (qpdf's `--allow-insecure` is specifically the
+  flag needed to permit an *empty* owner password alongside restrictions, and its own help text
+  calls that combination insecure) — the UI should require this field non-empty, or warn clearly if
+  it matches the open password.
+
+**Confirmed working, not hypothetical:** encrypted a test file with
+`--encrypt '' ownersecret 256 --print=none --extract=n --modify=none --`, then read it back with
+qpdf's own `--show-encryption`: opened with the empty user password ("Supplied password is user
+password"), and every requested restriction correctly reported "not allowed."
+
+**A limitation to disclose in the UI, not bury:** PDF permission restrictions are an honor system
+enforced by compliant readers, not a hard security boundary — the content is still decryptable with
+the (possibly empty) user password, so anyone with basic tooling can strip them. Say this plainly,
+matching how Extract Text already discloses its OCR boundary and how Protect PDF's own description
+already sets honest expectations.
+
+**Verification gap to plan around:** `@cantoo/pdf-lib` has no API to read permission flags back after
+loading (checked — only `doc.isEncrypted` exists). Testing this therefore needs either qpdf's own
+`--show-encryption` output (real-browser/Playwright verification, the pattern already established for
+**F-1**) or manual parsing of the raw `/P` integer in the encryption dictionary — plan the test
+approach around that gap, not around an API that doesn't exist.
+
+**UI scope for v1:** a simple three-control set matching what most consumer tools expose — "Allow
+printing" (none/low-res/full), "Allow copying text/images" (yes/no), "Allow editing" (none/all —
+collapse qpdf's five-level modify scale to a binary for v1; note the finer granularity exists if ever
+needed) — plus the two required password fields. Don't expose all eight qpdf flags at once.
+
+**Accept:** a PDF protected with printing disabled and a distinct permissions password reports, via
+qpdf's own `--show-encryption`, "print low resolution: not allowed" and "print high resolution: not
+allowed" when read back; it opens with just the open password (or no password, if left empty); and
+the permissions password — not the open password — is what's required to see unrestricted access.
 
 ---
 
