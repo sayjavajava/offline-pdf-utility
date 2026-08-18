@@ -11,6 +11,7 @@ import { PDFDocument } from "@cantoo/pdf-lib";
 import {
   editPdfMetadata,
   mergePdf,
+  protectPdf,
   removePdfPassword,
   splitPdf,
 } from "./pdf-utils";
@@ -71,6 +72,23 @@ describe("removePdfPassword", () => {
   it("passes an unencrypted file through untouched", async () => {
     const blob = await removePdfPassword(await makePdfFile(2));
     expect(await pageIndicesOf(blob)).toEqual([0, 1]);
+  });
+});
+
+describe("protectPdf validation (F-1)", () => {
+  // The actual encryption goes through qpdf compiled to WASM (qpdf-engine.ts),
+  // loaded via a `data:` URI that only a real browser's `fetch` resolves the
+  // way this relies on — Node's does not, so that path is excluded from
+  // coverage and verified against the real file:// build instead (see
+  // vite.config.ts and the F-1 section of docs/CODE_AUDIT.md). What's tested
+  // here is validation that runs before any of that: it must reject a bad
+  // password without ever reaching the WASM module.
+  it("rejects an empty password", async () => {
+    await expect(protectPdf(await makePdfFile(2), "")).rejects.toThrow(/enter a password/i);
+  });
+
+  it("rejects a password shorter than 4 characters", async () => {
+    await expect(protectPdf(await makePdfFile(2), "abc")).rejects.toThrow(/at least 4 characters/i);
   });
 });
 

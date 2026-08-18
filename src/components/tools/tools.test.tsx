@@ -38,6 +38,7 @@ const splitPdf = vi.fn();
 const splitPdfToZip = vi.fn();
 const mergePdf = vi.fn();
 const removePdfPassword = vi.fn();
+const protectPdf = vi.fn();
 const editPdfMetadata = vi.fn();
 const addWatermark = vi.fn();
 const convertImageToPdf = vi.fn();
@@ -52,6 +53,7 @@ vi.mock("@/lib/pdf-utils", async () => {
     splitPdfToZip: (...args: unknown[]) => splitPdfToZip(...args),
     mergePdf: (...args: unknown[]) => mergePdf(...args),
     removePdfPassword: (...args: unknown[]) => removePdfPassword(...args),
+    protectPdf: (...args: unknown[]) => protectPdf(...args),
     editPdfMetadata: (...args: unknown[]) => editPdfMetadata(...args),
     addWatermark: (...args: unknown[]) => addWatermark(...args),
     convertImageToPdf: (...args: unknown[]) => convertImageToPdf(...args),
@@ -63,6 +65,7 @@ vi.mock("@/lib/pdf-utils", async () => {
 import { SplitTool } from "./SplitTool";
 import { MergeTool } from "./MergeTool";
 import { UnlockTool } from "./UnlockTool";
+import { ProtectTool } from "./ProtectTool";
 import { EditTool } from "./EditTool";
 import { AddWatermarkTool } from "./AddWatermarkTool";
 import { ConvertTool } from "./ConvertTool";
@@ -76,6 +79,7 @@ beforeEach(() => {
   splitPdfToZip.mockReset();
   mergePdf.mockReset();
   removePdfPassword.mockReset();
+  protectPdf.mockReset();
   editPdfMetadata.mockReset();
   addWatermark.mockReset();
   convertImageToPdf.mockReset();
@@ -287,6 +291,69 @@ describe("UnlockTool (T-10)", () => {
     await user.click(screen.getByRole("button", { name: /remove protection/i }));
     await waitFor(() =>
       expect(reportToolError).toHaveBeenCalledWith(toastSpy, "Error removing protection", "boom"),
+    );
+  });
+});
+
+describe("ProtectTool (F-1)", () => {
+  it("calls protectPdf with the typed password when both fields match", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(1, "plain.pdf");
+    protectPdf.mockResolvedValue(new Blob(["x"]));
+    render(<ProtectTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/^password$/i), "secret123");
+    await user.type(screen.getByLabelText(/confirm password/i), "secret123");
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+
+    await waitFor(() => expect(protectPdf).toHaveBeenCalledWith(file, "secret123"));
+    expect(downloadBlob).toHaveBeenCalled();
+  });
+
+  it("guards on a password mismatch and never calls protectPdf", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(1, "plain.pdf");
+    render(<ProtectTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/^password$/i), "secret123");
+    await user.type(screen.getByLabelText(/confirm password/i), "different");
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Passwords do not match", variant: "destructive" }),
+    );
+    expect(protectPdf).not.toHaveBeenCalled();
+  });
+
+  it("guards when no file is selected and never calls protectPdf", async () => {
+    const user = userEvent.setup();
+    render(<ProtectTool />);
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "No file selected", variant: "destructive" }),
+    );
+    expect(protectPdf).not.toHaveBeenCalled();
+  });
+
+  it("surfaces protectPdf's rejection message, e.g. an already-encrypted input", async () => {
+    const user = userEvent.setup();
+    const file = await makePdfFile(1, "plain.pdf");
+    protectPdf.mockRejectedValue(new Error("This PDF already has a password."));
+    render(<ProtectTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.type(screen.getByLabelText(/^password$/i), "secret123");
+    await user.type(screen.getByLabelText(/confirm password/i), "secret123");
+    await user.click(screen.getByRole("button", { name: /protect pdf/i }));
+
+    await waitFor(() =>
+      expect(reportToolError).toHaveBeenCalledWith(
+        toastSpy,
+        "Error protecting PDF",
+        expect.objectContaining({ message: "This PDF already has a password." }),
+      ),
     );
   });
 });

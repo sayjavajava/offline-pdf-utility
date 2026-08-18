@@ -48,3 +48,6 @@ Thumbs.db
 
 # Generated from the installed pdfjs-dist by scripts/generate-cmaps.mjs
 src/lib/pdf-cmaps.generated.ts
+
+# Generated from the installed @jspawn/qpdf-wasm by scripts/generate-qpdf-wasm.mjs
+src/lib/qpdf-wasm.generated.ts

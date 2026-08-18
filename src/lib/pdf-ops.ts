@@ -3,6 +3,7 @@
 // actually be opened. Upstream has no `password` load option at all.
 import { PDFDocument, degrees } from '@cantoo/pdf-lib';
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
+import { encryptPdfBytes } from './qpdf-engine';
 
 /**
  * Loads a PDF, decrypting it when a password is supplied.
@@ -287,6 +288,34 @@ export async function removePdfPassword(file: File, password?: string): Promise<
     // Re-saving the document without any encryption options effectively removes the password.
     const pdfBytes = await pdfDoc.save();
     return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+/**
+ * Adds password protection to a PDF (F-1) — the counterpart to
+ * removePdfPassword, and the one direction @cantoo/pdf-lib cannot do at all:
+ * it can read encryption but has no SaveOptions for writing it. This goes
+ * through qpdf compiled to WASM instead (see qpdf-engine.ts for how its
+ * binary is loaded without any network access).
+ *
+ * Encrypts with AES-256. The input must not already be encrypted — qpdf
+ * needs its own password to open an encrypted input first, and this tool
+ * does not collect one; the error tells the user to unlock it first instead.
+ *
+ * @param file The PDF file to protect.
+ * @param password The password required to open the protected PDF.
+ * @returns A Blob of the newly encrypted PDF file.
+ */
+export async function protectPdf(file: File, password: string): Promise<Blob> {
+    if (!password) {
+        throw new Error('Enter a password.');
+    }
+    if (password.length < 4) {
+        throw new Error('Use a password of at least 4 characters.');
+    }
+
+    const inputBytes = new Uint8Array(await file.arrayBuffer());
+    const outputBytes = await encryptPdfBytes(inputBytes, password);
+    return new Blob([outputBytes], { type: 'application/pdf' });
 }
 
 /**
