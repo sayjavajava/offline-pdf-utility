@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open post-release items: **F-12, P1-17**. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented. Open post-release items: **F-12**. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -24,7 +24,7 @@
 | 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
 | 8 | **F-12** | ⬜ **open — real work, scoped below.** Found post-release: `v0.1.0` testers correctly identified that DOCX conversion producing an unsearchable image undermines the feature's actual purpose, not just a footnote-able limitation. |
 | 8 | F-13 | ✅ done — `dd92468` |
-| — | **P1-17** | ⬜ **open — discovered verifying F-1's round trip, predates it. See below.** |
+| — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
 ### The one feature that cannot be built as specified
 
@@ -60,17 +60,16 @@ real browser does), so `qpdf-engine.ts` is excluded from unit coverage and inste
 Playwright against the built file — same treatment as `pdf-render.ts`.
 
 Verifying the round trip (Protect, then Unlock through the app's own existing tool) surfaced a real,
-**pre-existing** bug in `removePdfPassword` unrelated to anything F-1 added — see **P1-17**. Worked
-around for this tool's own output (`--object-streams=disable`); the general case is still open.
+**pre-existing** bug in `removePdfPassword` unrelated to anything F-1 added, initially worked around
+here for this tool's own output — then fixed for real at the source, in `loadPdf` itself. See **P1-17**.
 
 **CI was red and is now fixed** (`afb6aa9`). `jsdom@30` requires Node `^22.22.2` but both workflow
 jobs pinned Node 20, so `verify` failed before a single test ran — meaning the gate protecting all
 of this work was not actually running. Both jobs are on Node 22 and `package.json` now declares
 `engines`.
 
-**Everything actionable in this audit is now implemented, save two open items:** **F-12** (real
-DOCX→PDF text conversion) and **P1-17** (the `removePdfPassword` bug above, for encrypted PDFs from
-other tools). **F-11** stays closed for the product reasons above.
+**Everything actionable in this audit is now implemented, save one open item:** **F-12** (real
+DOCX→PDF text conversion). **F-11** stays closed for the product reasons above.
 
 ### Worker feasibility on `file://` — measured, not assumed
 
@@ -254,7 +253,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | | Found | Still open | Meaning |
 |---|---|---|---|
 | **P0** | 5 | **0** | Broken and user-visible. |
-| **P1** | 12 | **1** (P1-17) | Wrong behaviour, misleading errors, silent failures. P1-17 found post-release, during F-1. |
+| **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
 | **F** | 13 | **1** (F-12) | Additive features. F-1–F-10, F-13 done; F-11 closed as incompatible; F-12 added post-release, still open. |
@@ -792,11 +791,11 @@ user:
 **Accept:** convert a multi-page DOCX with a table — output is A4, has margins, no row is sliced
 mid-height, and the UI shows the rasterization notice.
 
-### P1-17 · `removePdfPassword` silently fails to decrypt a PDF whose xref is a compressed stream — open
+### P1-17 · `removePdfPassword` silently fails to decrypt a PDF whose xref is a compressed stream — ✅ DONE (`b4ace14`)
 
 **Found while verifying F-1's round trip** (Protect → Unlock through the app's own two tools), not
-from a report. `removePdfPassword` (`loadPdf` + `pdfDoc.save()`, unchanged since **P0-3**) reports
-success and downloads a file — but the file is **still encrypted**. Reproduced directly, no app UI
+from a report. `removePdfPassword` (`loadPdf` + `pdfDoc.save()`, unchanged since **P0-3**) reported
+success and downloaded a file — but the file was **still encrypted**. Reproduced directly, no app UI
 involved:
 
 ```
@@ -806,37 +805,51 @@ reloaded = PDFDocument.load(saved, { ignoreEncryption: true })
 reloaded.isEncrypted → true                    // the save did not actually strip it
 ```
 
-**Root cause, isolated at the byte level:** `@cantoo/pdf-lib` only clears `context.trailerInfo.Encrypt`
-(`PDFDocument.js` constructor) — the classic *trailer dictionary's* `/Encrypt` entry. A source PDF
-whose cross-reference table is a **compressed xref stream** (PDF 1.5+; qpdf's default, and common
-output from many modern PDF writers) has no separate trailer keyword — the xref stream's own
-dictionary carries `/Encrypt` inline instead. The parser does not special-case that object as "this
-was the xref stream, discard it"; it survives into the resaved file as an ordinary object, complete
-with its own `/Encrypt` reference. A later load can find that stale object and report the file as
-encrypted again, even though the genuinely current xref stream (which pdf-lib freshly wrote) has no
-`/Encrypt` at all. Confirmed by diffing the resaved bytes: the stale xref-stream object is present
-verbatim, sitting alongside the real, correct one.
+**Root cause, isolated by reading the parser, not by guessing:** a PDF whose cross-reference table is
+a **compressed xref stream** (PDF 1.5+; qpdf's default, and common output from many modern PDF
+writers) stores that xref stream as an ordinary indirect object, same as any page or font.
+`PDFParser.parseIndirectObject` reads it correctly for its metadata — Root, Info, and critically
+Encrypt all get pulled into `context.trailerInfo` — but then *unconditionally* registers the object
+itself in the document's live object table too (`this.context.assign(ref, object)`, no exception for
+the type it just consumed). That stray object still carries its own `/Encrypt` reference in its own
+dict, untouched by the trailer cleanup (which only clears `context.trailerInfo.Encrypt`, a separate
+copy). `.save()` serializes every live object, so the stale one — `/Type /XRef` and all — ends up in
+the resaved file, and a later load can find that `/Encrypt` and report the file as still encrypted.
 
-**Consequence:** any PDF encrypted with a tool that emits a compressed xref stream — not just this
-app's own **F-1** — fails Unlock silently: no error, a "Success!" toast, a file that downloads fine,
-and is still password protected. This predates F-1; F-1 only surfaced it by being the first thing in
-this codebase to produce that xref shape.
+There are two shapes this takes, both handled by the fix:
+- **Unencrypted source:** the stray object parses cleanly as a `PDFRawStream` with `/Type /XRef` in
+  its dict.
+- **Encrypted source:** pdf-lib's decrypt pass *re-parses the entire byte stream* through a
+  `CipherTransformFactory`, including the xref stream — which the PDF spec requires to stay
+  plaintext, since it bootstraps decryption in the first place. Decrypting bytes that were never
+  encrypted corrupts them, the object fails its internal parse, and it degrades to an opaque
+  `PDFInvalidObject` holding the raw, undecrypted bytes. Confirmed by inspection: `/Type /XRef ...
+  /Encrypt N 0 R` reads perfectly plainly inside those raw bytes — a `PDFRawStream`-shaped check alone
+  cannot see this variant at all.
 
-**Mitigation shipped with F-1** (`qpdf-engine.ts`): qpdf is invoked with `--object-streams=disable`,
-forcing a classic trailer + xref table, which sidesteps the bug entirely for anything *this app*
-encrypts. Verified: decrypt-then-resave round-trips correctly once the source uses a classic xref.
-**This does not fix the general case** — a PDF encrypted by some other tool (Acrobat, a different
-qpdf-based tool, etc.) using a compressed xref stream will still hit this on Unlock.
+**Consequence (before the fix):** any PDF encrypted with a tool that emits a compressed xref stream —
+not just this app's own **F-1** — failed Unlock silently: no error, a "Success!" toast, a file that
+downloaded fine, and was still password protected. This predated F-1; F-1 only surfaced it by being
+the first thing in this codebase to produce that xref shape.
 
-**Required (not done):** either teach `@cantoo/pdf-lib`'s parser to exclude the source document's own
-xref-stream object from the object graph it carries forward (a real parser fix, likely needs a patch
-against the fork), or have `removePdfPassword` detect the case (reload what it just saved and check
-`isEncrypted` before returning) and fail loudly instead of silently — the second is a much smaller
-change and turns this from a silent failure into an honest error, even though it doesn't recover the
-ability to unlock that file.
+**Fixed at the source**, in `loadPdf` (`pdf-ops.ts`) — the single load path every tool shares:
+`stripStaleXRefStreamObjects` deletes any indirect object shaped like a cross-reference stream after
+load, in both forms above (`/Type /XRef` is reserved for xref streams by the PDF spec, so this is
+safe by construction, not a heuristic). `qpdf-engine.ts`'s `--object-streams=disable` workaround —
+shipped with F-1 as a stopgap for this app's own output — was removed once the real fix landed; qpdf
+now runs with its own defaults, and the Protect → Unlock round trip was re-verified against the real
+built app with every non-local request blocked, producing genuinely compressed-xref output that
+decrypts cleanly.
 
-**Accept:** `removePdfPassword` on a compressed-xref-stream encrypted PDF either genuinely decrypts it,
-or throws instead of returning a still-encrypted file labelled as success.
+**Pinned by a new committed fixture**, `encrypted-aes-256-xrefstream.pdf` (pdf-lib cannot write
+encryption at all, so — like the other encrypted fixtures — this had to be generated once and
+committed; this one specifically needed qpdf itself to reproduce the compressed-xref shape, since the
+Python/pypdf generator behind the other three does not emit it). Confirmed to fail without the fix
+and pass with it before committing either.
+
+**Accept:** `removePdfPassword` on a compressed-xref-stream encrypted PDF genuinely decrypts it —
+verified both by unit test (`pdf-utils.test.ts`) and by a real-browser round trip through the app's
+own Protect and Unlock tools.
 
 ---
 
