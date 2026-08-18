@@ -26,15 +26,15 @@
  * then restored — both to surface *something* readable and so a failed
  * attempt does not spam a real user's devtools console.
  *
- * `--object-streams=disable` forces a classic xref table instead of qpdf's
- * default compressed cross-reference stream. Without it, @cantoo/pdf-lib's
- * decrypt-then-resave (removePdfPassword) silently fails on this tool's own
- * output: it carries the original xref-stream object — which embeds its own
- * `/Encrypt` reference — through into the resaved file as an ordinary object,
- * and a later reload finds that stale `/Encrypt` and reports the "unlocked"
- * file as still encrypted, with no error at any step. Verified directly:
- * decrypting and resaving a qpdf-encrypted file only strips the encryption
- * for real once the source uses a classic xref table.
+ * qpdf's default output uses a compressed cross-reference stream, which used
+ * to break the round trip through this app's own Unlock tool afterwards —
+ * @cantoo/pdf-lib's decrypt-then-resave silently failed to strip the
+ * encryption, reporting success while handing back a file that was still
+ * password protected. That was a bug in `loadPdf`'s handling of that xref
+ * shape generally (not specific to this tool's output), fixed at the source
+ * in `stripStaleXRefStreamObjects` (pdf-ops.ts) — see **P1-17** in
+ * docs/CODE_AUDIT.md for the full root cause. No qpdf-side workaround is
+ * needed here as a result; qpdf runs with its own defaults.
  */
 import createQpdfModule from '@jspawn/qpdf-wasm/qpdf.js';
 import { QPDF_WASM_DEFLATED_BASE64 } from './qpdf-wasm.generated';
@@ -92,11 +92,7 @@ export async function encryptPdfBytes(inputBytes: Uint8Array, password: string):
     });
 
     mod.FS.writeFile('in.pdf', inputBytes);
-    const exitCode = mod.callMain([
-      '--object-streams=disable',
-      '--encrypt', password, password, '256', '--',
-      'in.pdf', 'out.pdf',
-    ]);
+    const exitCode = mod.callMain(['--encrypt', password, password, '256', '--', 'in.pdf', 'out.pdf']);
     if (exitCode !== 0) {
       throw new Error(describeFailure(log));
     }

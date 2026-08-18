@@ -1,9 +1,76 @@
 // @cantoo/pdf-lib rather than upstream pdf-lib: it is an API-compatible fork
 // that implements the standard security handler, so encrypted documents can
 // actually be opened. Upstream has no `password` load option at all.
-import { PDFDocument, degrees } from '@cantoo/pdf-lib';
+import { PDFDocument, PDFRawStream, PDFInvalidObject, PDFName, degrees } from '@cantoo/pdf-lib';
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
 import { encryptPdfBytes } from './qpdf-engine';
+
+/**
+ * Strips leftover cross-reference-stream objects from a loaded document
+ * (P1-17).
+ *
+ * A PDF whose xref table is a compressed stream (PDF 1.5+; qpdf's default,
+ * and common output from modern PDF writers) carries the object as an
+ * ordinary indirect object, same as any page or font. @cantoo/pdf-lib's
+ * parser reads it correctly for its metadata (Root, Info, and critically
+ * Encrypt all get pulled into `context.trailerInfo`) but then *also*
+ * registers the object itself in the document's live object table
+ * (`PDFParser.parseIndirectObject`: `this.context.assign(ref, object)` runs
+ * unconditionally, with no exception for the type it just consumed).
+ *
+ * For an encrypted source, that stray object still carries its own
+ * `/Encrypt` reference in its own dict — untouched by the trailer cleanup a
+ * few lines below, since that only clears `context.trailerInfo.Encrypt`, not
+ * this separate copy. `.save()` serializes every live object, so the stale
+ * object — `/Type /XRef` and all — ends up in the resaved file. A later load
+ * can find that `/Encrypt` and report the file as still encrypted, even
+ * though the genuinely current xref stream (freshly written by this same
+ * save) carries none. No error at any step: `removePdfPassword` reports
+ * success and hands back a file that never actually lost its password.
+ *
+ * Two shapes, both handled:
+ *
+ *  - **Unencrypted source:** the stale object parses cleanly as a
+ *    `PDFRawStream` with `/Type /XRef` in its dict. `/Type /XRef` is
+ *    reserved for cross-reference streams by the PDF spec — no legitimate
+ *    content object can carry it — so deleting every object with that type
+ *    is safe by construction, not a heuristic.
+ *  - **Encrypted source:** the library's decrypt pass re-parses the *entire*
+ *    byte stream through a `CipherTransformFactory`, including the xref
+ *    stream object — which the PDF spec requires to stay in plaintext even
+ *    in an encrypted document, since it is needed to bootstrap decryption in
+ *    the first place. Decrypting bytes that were never encrypted corrupts
+ *    them, the stream fails its internal consistency check, and the object
+ *    degrades to an opaque `PDFInvalidObject` holding the raw, undecrypted
+ *    bytes — confirmed by inspection: `/Type /XRef ... /Encrypt N 0 R` reads
+ *    perfectly plainly inside `.data`. A `PDFRawStream` type check cannot see
+ *    this shape at all, so invalid objects are separately sniffed for the
+ *    same `/Type /XRef` marker in their raw header bytes.
+ */
+function looksLikeXRefStreamObject(object: InstanceType<typeof PDFInvalidObject>): boolean {
+    // `.data` is private to the class; go through its public byte-copy API
+    // instead of reaching past that. `copyBytesInto` always writes its full
+    // size regardless of the buffer offered, so size the buffer to match —
+    // only the header is actually inspected below.
+    const buffer = new Uint8Array(object.sizeInBytes());
+    object.copyBytesInto(buffer, 0);
+    const head = buffer.subarray(0, Math.min(buffer.length, 512));
+    let text = '';
+    for (let i = 0; i < head.length; i++) text += String.fromCharCode(head[i]);
+    return /<<[^>]*\/Type\s*\/XRef\b/.test(text);
+}
+
+function stripStaleXRefStreamObjects(pdfDoc: PDFDocument): void {
+    const { context } = pdfDoc;
+    for (const [ref, object] of context.enumerateIndirectObjects()) {
+        const isXRefStream =
+            (object instanceof PDFRawStream && object.dict.lookup(PDFName.of('Type')) === PDFName.of('XRef')) ||
+            (object instanceof PDFInvalidObject && looksLikeXRefStreamObject(object));
+        if (isXRefStream) {
+            context.delete(ref);
+        }
+    }
+}
 
 /**
  * Loads a PDF, decrypting it when a password is supplied.
@@ -27,7 +94,9 @@ async function loadPdf(file: File, password?: string): Promise<PDFDocument> {
     const supplied = password ?? '';
 
     try {
-        return await PDFDocument.load(bytes, { password: supplied });
+        const pdfDoc = await PDFDocument.load(bytes, { password: supplied });
+        stripStaleXRefStreamObjects(pdfDoc);
+        return pdfDoc;
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
 

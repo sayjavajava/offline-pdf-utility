@@ -23,7 +23,11 @@ import {
   pageIndicesOf,
 } from "@/test/fixtures";
 
-const ENCRYPTED = ["encrypted-rc4-128.pdf", "encrypted-aes-256.pdf"] as const;
+const ENCRYPTED = [
+  "encrypted-rc4-128.pdf",
+  "encrypted-aes-256.pdf",
+  "encrypted-aes-256-xrefstream.pdf",
+] as const;
 
 describe("removePdfPassword", () => {
   it.each(ENCRYPTED)("decrypts %s and re-saves it openable with no password", async (name) => {
@@ -33,6 +37,35 @@ describe("removePdfPassword", () => {
     expect(reloaded.isEncrypted).toBe(false);
     expect(reloaded.getPageCount()).toBe(3);
   });
+
+  it(
+    "genuinely strips encryption from a source whose xref is a compressed stream (P1-17)",
+    async () => {
+      // qpdf's default output shape (also common from other modern PDF
+      // writers) — decrypting used to report success while silently handing
+      // back a file that was still encrypted, because a leftover copy of the
+      // source's xref-stream object (carrying its own /Encrypt reference)
+      // survived into the resaved file. `isEncrypted` alone doesn't catch
+      // this: it was already false on the in-memory document before save.
+      // Only a genuine reload of the *saved bytes*, exactly as done here,
+      // would have caught the original bug.
+      const blob = await removePdfPassword(
+        encryptedPdfFile("encrypted-aes-256-xrefstream.pdf"),
+        FIXTURE_PASSWORD,
+      );
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+
+      const probed = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      expect(probed.isEncrypted).toBe(false);
+
+      // Must open with *no* password at all -- ignoreEncryption alone isn't
+      // proof; a still-encrypted file loaded that way still has ciphertext
+      // where the content should be.
+      const reopened = await PDFDocument.load(bytes);
+      expect(reopened.getPageCount()).toBe(3);
+      expect(await pageIndicesOf(blob)).toEqual([0, 1, 2]);
+    },
+  );
 
   it("preserves page identity and order, not just the count", async () => {
     const blob = await removePdfPassword(
