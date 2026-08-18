@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open backlog items: **F-14, F-15, F-16, F-17** — written up for later implementation, not started. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented. Open backlog items: **F-14, F-16, F-17** — written up for later implementation, not started. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -24,7 +24,8 @@
 | 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
 | 8 | F-12 | ✅ done — `4ae3de0` |
 | 8 | F-13 | ✅ done — `dd92468` |
-| 9 | **F-14, F-15, F-17** | ⬜ **open — written up, not started. See below.** |
+| 9 | F-15 | ✅ done — `9f7e38c` |
+| 9 | **F-14, F-17** | ⬜ **open — written up, not started. See below.** |
 | 9 | **F-16** | ⬜ **open — needs a real spike; initial evidence discourages the obvious approach. See below.** |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
@@ -260,7 +261,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 17 | **4** (F-14, F-15, F-16, F-17) | Additive features. F-1–F-10, F-12, F-13 done; F-11 closed as incompatible; F-14–F-17 written up, not started. |
+| **F** | 17 | **3** (F-14, F-16, F-17) | Additive features. F-1–F-10, F-12, F-13, F-15 done; F-11 closed as incompatible; F-14, F-16, F-17 written up, not started. |
 
 ### The three that mattered most — all now fixed
 
@@ -1289,7 +1290,7 @@ dependency**: qpdf (`qpdf-engine.ts`, already bundled for **F-1**) supports it d
 dimensions unchanged, image still decodes) — verified by size comparison plus a reload, not just a
 successful exit code.
 
-**F-15 · Crop / resize pages — open, scoped below.** Two genuinely different operations sharing one
+**F-15 · Crop / resize pages — ✅ DONE (`9f7e38c`).** Two genuinely different operations sharing one
 UI — verified directly from `@cantoo/pdf-lib`'s `PDFPage.ts` source, because the naive version of
 this is easy to get wrong (see below):
 
@@ -1321,6 +1322,38 @@ enhancement, not a blocker for v1. A paper-size dropdown (A4/Letter/Legal/custom
 changed); resizing to A4 with scale-to-fit produces content that is proportionally scaled and
 centered — verified by checking a known reference point's coordinates moved by the expected scale
 factor, not merely that the MediaBox now reads A4 dimensions.
+
+**What shipped and how it was verified.** `cropPdf`/`resizePdf` in `pdf-ops.ts`, wired through the
+worker exactly like every other operation (no special-casing needed — `pdf.worker.ts` dispatches by
+function name), plus a `CropResizeTool` with a Crop/Resize mode toggle: numeric per-edge margins for
+Crop, a paper-size dropdown (A4/Letter/Legal/Custom) with an opt-in stretch checkbox for Resize.
+
+The exact centering math for Resize was derived from reading `scale()`'s source and then confirmed
+against the library's *actual output*, not assumed from the reading alone — the same discipline
+established for F-1 and P1-17. Building a page, drawing a text marker, calling `scale(0.5, 0.5)`, and
+decompressing the resulting content stream directly showed `scaleContent` prepends a `q` / `<sx> 0 0
+<sy> 0 0 cm` / … / `Q` wrapper around the *existing* content rather than rewriting each drawing
+operator's coordinates — so a marker drawn at absolute `(50, 50)` stays literally `50 50` in the `Tm`
+operator, and is repositioned by the reader applying the prepended matrix on top, scaling from the
+PDF coordinate origin `(0,0)`. Critically, `setSize` (which `scale()` also calls) anchors the new
+box's lower-left corner to the box's *own* current `x,y`, not to `(0,0)` — so for a page whose
+MediaBox does not start at the origin, the scaled content's own origin (`box.x * sx`) and the box's
+own origin (still `box.x`) diverge. The implementation's own `setMediaBox` call has to correct for
+that divergence, not just for centering — confirmed by testing against a page with a deliberately
+non-zero-origin MediaBox (`setMediaBox(10, 20, 300, 300)` before resizing), where the naive
+zero-origin formula would have put the box off by exactly the pre-existing offset.
+
+Verified against the real built app (Playwright, `file://`, all non-local requests blocked, 0
+network requests): (1) cropping a 200×200 page by `top=10, bottom=20, left=5, right=15` produced
+`CropBox = {x:5, y:20, width:180, height:170}` with `MediaBox` unchanged at `{0,0,200,200}`; (2)
+resizing that same page to A4 with the default scale-to-fit produced `MediaBox = {x:0, y:-123.305,
+width:595.28, height:841.89}` — the exact target dimensions, with `x` at `0` (width is the binding
+edge for a square source against A4's portrait ratio, so no horizontal offset) and `y` at the
+precise computed centering offset, not just "some" offset; (3) an already-encrypted file without a
+password produces the existing readable "password protected" error rather than a raw failure.
+Unit tests separately pin the reference-point claim directly: a marker's `Tm` coordinates are
+unchanged post-resize (confirming the `cm`-wrapper mechanism, not a coordinate rewrite), and
+`Tm * scaleFactor` lands exactly on the new box's own coordinates.
 
 **F-16 · Repair a damaged PDF — open, needs a real spike first; initial evidence is discouraging.**
 The obvious assumption — qpdf is purpose-built for this, wire it up — **did not survive testing**,
