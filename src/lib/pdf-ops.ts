@@ -629,6 +629,135 @@ export async function rearrangePdf(
 }
 
 
+export type CropMargins = {
+    /** Points to trim from each edge. Positive shrinks the visible page. */
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+};
+
+/**
+ * Crops selected pages (or all) by a fixed margin per edge (F-15).
+ *
+ * Non-destructive: only `CropBox` moves — content and MediaBox are untouched,
+ * so nothing is discarded and the crop can be undone by re-running with the
+ * MediaBox's own dimensions. `setCropBox(x, y, width, height)` takes the box's
+ * lower-left corner and size, not two opposite corners (verified from source).
+ */
+export async function cropPdf(
+    file: File,
+    margins: CropMargins,
+    pages = 'all',
+    password?: string,
+): Promise<Blob> {
+    for (const [label, value] of Object.entries(margins)) {
+        if (!Number.isFinite(value) || value < 0) {
+            throw new Error(`The ${label} margin must be a number of 0 or more.`);
+        }
+    }
+
+    const pdfDoc = await loadPdf(file, password);
+    const pageCount = pdfDoc.getPageCount();
+    let indices: number[];
+
+    if (pages.toLowerCase() === 'all' || pages.trim() === '') {
+        indices = Array.from({ length: pageCount }, (_, i) => i);
+    } else {
+        const parsed = parsePageRange(pages, pageCount);
+        if (parsed.errors.length > 0) throw new Error(parsed.errors.join(' '));
+        if (parsed.indices.length === 0) throw new Error('Invalid page range specified.');
+        indices = [...new Set(parsed.indices)];
+    }
+
+    for (const i of indices) {
+        const page = pdfDoc.getPage(i);
+        const box = page.getCropBox();
+        const width = box.width - margins.left - margins.right;
+        const height = box.height - margins.top - margins.bottom;
+        if (width <= 0 || height <= 0) {
+            throw new Error(
+                `The margins are larger than page ${i + 1} (${box.width.toFixed(0)}×${box.height.toFixed(0)} pt).`,
+            );
+        }
+        page.setCropBox(box.x + margins.left, box.y + margins.bottom, width, height);
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+export type PaperSize = { width: number; height: number };
+
+/** Common paper sizes in points (72 pt/in), portrait orientation. */
+export const PAPER_SIZES: Record<string, PaperSize> = {
+    A4: { width: 595.28, height: 841.89 },
+    Letter: { width: 612, height: 792 },
+    Legal: { width: 612, height: 1008 },
+};
+
+/**
+ * Resizes selected pages (or all) to a target size (F-15).
+ *
+ * Uses `page.scale(x, y)`, not `setSize(width, height)` — verified from
+ * `PDFPage.ts` source: `setSize` only rewrites the box dimensions and never
+ * touches content, so shrinking with it just clips content and enlarging
+ * leaves it anchored at its original position. `scale()` transforms content
+ * and annotations proportionally along with the box.
+ *
+ * Defaults to scale-to-fit preserving aspect ratio (uniform, centered) rather
+ * than stretching, since a non-uniform stretch visibly distorts text and
+ * images. Centering math (verified empirically against a real content stream,
+ * not assumed): `scale()` scales content from the PDF coordinate origin
+ * (0,0), the same origin `setSize` anchors the box's lower-left corner to —
+ * so after scaling, the content's own box has moved to
+ * `(origX*scale, origY*scale)` while the box itself stays at `(origX, origY)`.
+ * Shifting the final box by half the leftover space on each axis re-centers
+ * it around that already-scaled content.
+ */
+export async function resizePdf(
+    file: File,
+    target: PaperSize,
+    pages = 'all',
+    password?: string,
+    stretch = false,
+): Promise<Blob> {
+    if (!Number.isFinite(target.width) || !Number.isFinite(target.height) || target.width <= 0 || target.height <= 0) {
+        throw new Error('Target page size must be a positive width and height.');
+    }
+
+    const pdfDoc = await loadPdf(file, password);
+    const pageCount = pdfDoc.getPageCount();
+    let indices: number[];
+
+    if (pages.toLowerCase() === 'all' || pages.trim() === '') {
+        indices = Array.from({ length: pageCount }, (_, i) => i);
+    } else {
+        const parsed = parsePageRange(pages, pageCount);
+        if (parsed.errors.length > 0) throw new Error(parsed.errors.join(' '));
+        if (parsed.indices.length === 0) throw new Error('Invalid page range specified.');
+        indices = [...new Set(parsed.indices)];
+    }
+
+    for (const i of indices) {
+        const page = pdfDoc.getPage(i);
+        const box = page.getMediaBox();
+        const sx = stretch ? target.width / box.width : Math.min(target.width / box.width, target.height / box.height);
+        const sy = stretch ? target.height / box.height : sx;
+
+        page.scale(sx, sy);
+
+        const scaledWidth = box.width * sx;
+        const scaledHeight = box.height * sy;
+        const offsetX = (target.width - scaledWidth) / 2;
+        const offsetY = (target.height - scaledHeight) / 2;
+        page.setMediaBox(box.x * sx - offsetX, box.y * sy - offsetY, target.width, target.height);
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
 export type PageNumberFormat = 'n' | 'n-of-total' | 'bates';
 
 export type PageNumberPosition =
