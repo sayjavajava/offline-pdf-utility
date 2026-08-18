@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open backlog items: **F-14, F-15, F-16, F-17** — written up for later implementation, not started. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented. Open backlog items: **F-14, F-15, F-17** — written up for later implementation, not started. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -24,8 +24,8 @@
 | 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
 | 8 | F-12 | ✅ done — `4ae3de0` |
 | 8 | F-13 | ✅ done — `dd92468` |
+| 9 | F-16 | ✅ done — `54ac82c` (spike concluded negative; shipped as "Diagnose PDF") |
 | 9 | **F-14, F-15, F-17** | ⬜ **open — written up, not started. See below.** |
-| 9 | **F-16** | ⬜ **open — needs a real spike; initial evidence discourages the obvious approach. See below.** |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
 ### The one feature that cannot be built as specified
@@ -260,7 +260,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 17 | **4** (F-14, F-15, F-16, F-17) | Additive features. F-1–F-10, F-12, F-13 done; F-11 closed as incompatible; F-14–F-17 written up, not started. |
+| **F** | 17 | **3** (F-14, F-15, F-17) | Additive features. F-1–F-10, F-12, F-13, F-16 done; F-11 closed as incompatible; F-14, F-15, F-17 written up, not started. |
 
 ### The three that mattered most — all now fixed
 
@@ -1322,9 +1322,10 @@ changed); resizing to A4 with scale-to-fit produces content that is proportional
 centered — verified by checking a known reference point's coordinates moved by the expected scale
 factor, not merely that the MediaBox now reads A4 dimensions.
 
-**F-16 · Repair a damaged PDF — open, needs a real spike first; initial evidence is discouraging.**
-The obvious assumption — qpdf is purpose-built for this, wire it up — **did not survive testing**,
-and this section exists specifically so that assumption doesn't get re-made without re-checking it.
+**F-16 · Repair a damaged PDF — ✅ DONE (`54ac82c`), spike concluded negative: shipped as
+"Diagnose PDF" instead, per this finding's own accept criterion (b).** The obvious assumption —
+qpdf is purpose-built for this, wire it up — **did not survive testing**, and this section exists
+specifically so that assumption doesn't get re-made without re-checking it.
 
 **What was actually tested:** four corrupted variants of the same source PDF, built and checked
 directly (not from documentation) against both this app's current `loadPdf` (`@cantoo/pdf-lib`) and
@@ -1362,6 +1363,77 @@ exist.
 verified by successfully reading content back out of the repaired file afterward — not just a clean
 exit code — or (b) if the spike finds no such case, ship `--check` alone as a read-only diagnostic
 and record here why "repair" was dropped in favor of "diagnose."
+
+**The spike, completed.** Extending the table above rather than starting over — same method
+(corrupted variants of a source PDF, checked directly against both `loadPdf` and qpdf, not assumed
+from documentation):
+
+1. **Every untested cell from the original table was filled in.** The classic xref-table shape and
+   the corrupted-`/Length` case were re-tested against qpdf specifically (not just `loadPdf`, which
+   is all the original pass covered for those rows) — same result as the one directly-comparable
+   case already had: qpdf fails, `loadPdf` succeeds, for all three corruption types, against
+   **both** xref shapes (classic table and compressed stream).
+2. **"Another mode not yet tried"**, the exact gap the original spike left open, was checked
+   properly this time: `qpdf --help=all` was searched for every flag mentioning recovery,
+   reconstruction, or repair. The only one that exists is `--suppress-recovery`, which *disables*
+   recovery — there is no alternate or stronger recovery mode to opt into. Two flags that looked
+   like they might force a different parse path were tried anyway: `--ignore-xref-streams` (forces
+   qpdf off the xref stream and into table-based parsing/recovery) and `--qdf` (forces a full
+   rewrite through qpdf's normalizing form). Neither changed the outcome on any corrupted variant —
+   qpdf failed the same way regardless.
+3. **A full matrix, not spot checks:** 2 base xref shapes × 3 corruption types × 3 qpdf strategies
+   (default, `--ignore-xref-streams`, `--qdf`) = 18 qpdf attempts. **qpdf recovered zero of them.**
+   `loadPdf` (`@cantoo/pdf-lib`, unmodified — no new code) opened all 6 corrupted files and read
+   pages back from every one, both times this was tested (original pass and this one).
+4. **A real-world search, not only synthetic files**, per this finding's own bar for what a
+   completed spike needs: web search turned up
+   [Hopding/pdf-lib#454](https://github.com/Hopding/pdf-lib/issues/454), a genuine bug report
+   involving qpdf and a malformed PDF. It turned out to be a **different failure shape** than the
+   one this feature needs, worth recording precisely because it's an easy mix-up: the reporter's
+   file *loads* fine in pdf-lib (no error) but pdf-lib's *resave*, after merging pages from it, is
+   corrupted enough that Adobe Reader (specifically — other readers were fine) rejects it; qpdf's
+   `--check` on the same file reports "file is damaged." That is "pdf-lib silently produces a bad
+   output from data it read without complaint," not "pdf-lib fails to read something qpdf can." No
+   real-world case matching this finding's actual requirement — `loadPdf` fails outright and qpdf's
+   recovery succeeds where it didn't — turned up.
+
+**Conclusion: (b) applies.** Eighteen synthetic attempts across every corruption type, xref shape,
+and qpdf strategy tested found no case where qpdf's repair does anything `loadPdf` doesn't already
+do for free, and a real-world search found a related-but-different failure mode rather than a
+counterexample. "Repair a damaged PDF" is dropped. What shipped instead, as the accept criterion
+calls for: **Diagnose PDF**, a new tool wrapping qpdf's read-only `--check` — `diagnosePdfBytes` in
+`qpdf-engine.ts`, `diagnosePdf` in `pdf-ops.ts`, wired through the worker like every other operation,
+with a `DiagnoseTool` component showing qpdf's own report text (status: clean / warnings / errors,
+mapped from exit codes 0 / 3 / 2) rather than inventing new wording qpdf didn't say. An encrypted
+input without a password is distinguished from a genuinely damaged one — `--check` fails with
+"invalid password" in that case, which would otherwise be misreported as a structural error; a
+password field lets the check proceed against the decrypted content instead.
+
+**Two discoveries from writing this feature, not assumed:**
+
+- `diagnosePdfBytes`'s report text comes through `console.log` on the success path and
+  `console.warn` on the failure path — neither matches `encryptPdfBytes`'s own docstring above,
+  which says qpdf's Emscripten build "ignores `Module.print`/`printErr` and logs directly to
+  console" without specifying which method; confirmed directly (not assumed) that both need
+  interception, unlike `encryptPdfBytes`, which only ever needed `warn`/`error` because it has no
+  success-path output to capture.
+- The F-1 section above states `qpdf-engine.ts`'s success path is untestable under Vitest because
+  "Node's fetch does not resolve a `data:` URI the way a browser does." Re-checked while writing
+  this feature's unit tests rather than carried forward as given: on the Node 22.22.2 this repo now
+  requires (bumped for `jsdom@30` — see the F-1 section), `fetch("data:...")` resolves correctly and
+  the entire qpdf WASM module runs under Vitest. `diagnosePdf` therefore has real unit tests that run
+  actual qpdf `--check` invocations — including this spike's own corrupted-file and encrypted-file
+  cases — not just the pre-WASM validation that was previously all this kind of test could reach.
+  The `vite.config.ts` coverage exclusion is left in place (it still covers other qpdf-backed code),
+  but the premise behind it no longer holds unconditionally.
+
+Verified against the real built app (Playwright, `file://`, all non-local requests blocked, 0
+network requests): (1) a clean file reports "No structural problems found" with qpdf's own report
+text shown; (2) a file with `startxref` pointing past EOF reports errors, showing the actual
+offending offset (`999999999`) from qpdf's own message; (3) an encrypted file with no password asks
+for one rather than reporting a false structural error; (4) the same file, given its correct
+password, reports clean. Unit tests separately run the real qpdf WASM module under Vitest for the
+same four cases, plus a garbage-bytes input.
 
 **F-17 · Permissions on Protect PDF — open, scoped below.** `qpdf --help=encryption` (verified, not
 assumed) supports real restriction flags at the 256-bit strength **F-1** already uses:
