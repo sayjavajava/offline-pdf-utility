@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open post-release items: **F-12, F-13**.
+## Status — every originally-scoped finding is implemented. Open post-release items: **F-12**. Blocked: **F-1, F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -22,7 +22,7 @@
 | — | P2-24 | ✅ done — `f76784e` (operations run in a worker) |
 | 8 | **F-1, F-11** | ⛔ **blocked — measured, not deferred. See below.** |
 | 8 | **F-12** | ⬜ **open — real work, scoped below.** Found post-release: `v0.1.0` testers correctly identified that DOCX conversion producing an unsearchable image undermines the feature's actual purpose, not just a footnote-able limitation. |
-| 8 | **F-13** | ⬜ **open — small, scoped below.** From [#2](https://github.com/sayjavajava/offline-pdf-utility/issues/2): Split's page-range extraction was never a bug, but "split into individual per-page files" is a real, missing mode. |
+| 8 | F-13 | ✅ done — `dd92468` |
 
 ### The two features that cannot be built as specified
 
@@ -237,7 +237,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 11 | **0** | Wrong behaviour, misleading errors, silent failures. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 13 | **3** (F-1, F-12, F-13) | Additive features. F-2–F-10 done; F-11 closed as incompatible; F-12/F-13 added post-release. |
+| **F** | 13 | **2** (F-1, F-12) | Additive features. F-2–F-10, F-13 done; F-11 closed as incompatible; F-12 added post-release, still open. |
 
 ### The three that mattered most — all now fixed
 
@@ -1145,7 +1145,7 @@ genuinely selectable and found by Ctrl+F — verified by reading it back with `p
 `getTextContent()` (the same check **F-7**'s text extraction already uses), not just by eyeballing the
 render.
 
-**F-13 · Split into a zip of individual per-page PDFs — open, small.** From
+**F-13 · Split into a zip of individual per-page PDFs — ✅ DONE (`dd92468`).** From
 [issue #2](https://github.com/sayjavajava/offline-pdf-utility/issues/2): a user expected Split to
 produce one PDF per page in a zip, and reported the single-combined-file result as a bug. It wasn't
 — re-verified against the `v0.1.0` release with a byte comparison, not just a page count: `all` and
