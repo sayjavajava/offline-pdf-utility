@@ -21,6 +21,8 @@ export type {
   PageNumberOptions,
   PageNumberPosition,
   SplitPage,
+  CropMargins,
+  PaperSize,
 } from './pdf-ops';
 export type { ExtractedImage, ExtractImagesResult } from './image-extract';
 
@@ -28,6 +30,7 @@ export type { ExtractedImage, ExtractImagesResult } from './image-extract';
 export const parsePageRange = ops.parsePageRange;
 export const formatPageNumber = ops.formatPageNumber;
 export const detectImageFormat = ops.detectImageFormat;
+export const PAPER_SIZES = ops.PAPER_SIZES;
 
 /**
  * Route one operation through the worker, falling back to a direct call.
@@ -72,6 +75,8 @@ export const rearrangePdf = (...a: Parameters<typeof ops.rearrangePdf>) => run('
 export const addPageNumbers = (...a: Parameters<typeof ops.addPageNumbers>) =>
   run('addPageNumbers', a);
 export const extractImages = (...a: Parameters<typeof ops.extractImages>) => run('extractImages', a);
+export const cropPdf = (...a: Parameters<typeof ops.cropPdf>) => run('cropPdf', a);
+export const resizePdf = (...a: Parameters<typeof ops.resizePdf>) => run('resizePdf', a);
 
 /**
  * DOCX conversion stays on the main thread: docx-layout.ts's HTML parsing
