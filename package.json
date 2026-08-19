@@ -26,6 +26,7 @@
     "check:offline": "node scripts/check-offline.mjs",
     "check:offline:runtime": "node scripts/check-offline-runtime.mjs",
     "bench:large-pdf": "node scripts/bench-large-pdf.mjs",
+    "bench:image-batch": "node scripts/bench-image-batch.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
