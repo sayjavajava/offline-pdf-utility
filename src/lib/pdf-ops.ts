@@ -89,7 +89,7 @@ function stripStaleXRefStreamObjects(pdfDoc: PDFDocument): void {
  *   - anything else (a corrupt file, say)          -> rethrow untouched, so a
  *     parse error is never mislabelled as a password problem
  */
-async function loadPdf(file: File, password?: string): Promise<PDFDocument> {
+export async function loadPdf(file: File, password?: string): Promise<PDFDocument> {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const supplied = password ?? '';
 
