@@ -1,15 +1,15 @@
-# Offline PDF Utility
+# OffGridPDF
 
 [![Latest release](https://img.shields.io/github/v/release/sayjavajava/offline-pdf-utility?label=release)](https://github.com/sayjavajava/offline-pdf-utility/releases/latest)
 [![Total downloads](https://img.shields.io/github/downloads/sayjavajava/offline-pdf-utility/total?label=downloads)](https://github.com/sayjavajava/offline-pdf-utility/releases)
 [![GitHub stars](https://img.shields.io/github/stars/sayjavajava/offline-pdf-utility?style=flat&label=stars)](https://github.com/sayjavajava/offline-pdf-utility/stargazers)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/sayjavajava/offline-pdf-utility)](LICENSE)
 
-An **AI-coded**, completely offline PDF toolkit built with React and TypeScript, featuring a stunning glassmorphism UI. Perform all PDF operations securely in your browser with complete privacy.
+An **AI-coded**, completely offline PDF toolkit built with React and TypeScript, featuring a stunning glassmorphism UI. Perform all PDF operations securely in your browser with complete privacy. Runs the same whether you're online or genuinely off the grid — it never asks.
 
 ## App Interface
 
-![Offline PDF Utility Interface](PDF-Utility-Professional-Document-Tools.png)
+![OffGridPDF Interface](PDF-Utility-Professional-Document-Tools.png)
 
 ## Features
 
@@ -55,7 +55,7 @@ measured results on hundreds of pages and tens of MB, not just estimates.
 
 This tool is designed to be simple and intuitive. All processing happens directly in your browser, ensuring your files remain private.
 
-1.  **Open the Application**: Access the PDF Utility through the provided live URL or by running it locally (see [Setup and Development](#setup-and-development)).
+1.  **Open the Application**: Access OffGridPDF through the provided live URL or by running it locally (see [Setup and Development](#setup-and-development)).
 2.  **Choose a Tool**: From the main dashboard, click on the tool you need, such as "Split PDF" or "Add Watermark".
 3.  **Follow the Steps**: Each tool will present you with simple options. This usually involves:
     *   Uploading your PDF or image file(s).
@@ -77,8 +77,8 @@ For a truly offline experience, you can run this application without any interne
     npm run build
     ```
 
-2.  **Ship `dist/index.html`**:
-    The build produces a single self-contained `dist/index.html` with all
+2.  **Ship `dist/offgridpdf.html`**:
+    The build produces a single self-contained `dist/offgridpdf.html` with all
     JavaScript, CSS, and fonts inlined. That one file *is* the application —
     there is nothing else to package, and no `.zip` is needed.
 
@@ -89,16 +89,16 @@ For a truly offline experience, you can run this application without any interne
 
 ### For End-Users
 
-1.  **Get the file**: Download `index.html` from the
+1.  **Get the file**: Download `offgridpdf.html` from the
     [Releases page](../../releases).
 2.  **Verify it** (optional, but the point of publishing a checksum): each
     release also carries `SHA256SUMS.txt`. Confirm your copy matches before you
     trust it —
 
     ```bash
-    sha256sum index.html                    # Linux
-    shasum -a 256 index.html                # macOS
-    CertUtil -hashfile index.html SHA256    # Windows
+    sha256sum offgridpdf.html                    # Linux
+    shasum -a 256 offgridpdf.html                # macOS
+    CertUtil -hashfile offgridpdf.html SHA256    # Windows
     ```
 
     The published file is the exact artifact CI built and checked, not a later

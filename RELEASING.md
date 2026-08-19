@@ -20,7 +20,7 @@
    - Extracts the `CHANGELOG.md` section matching the tag and uses it as the
      release notes. **Fails the release outright if no section matches** —
      this is deliberate, not a bug; see `ci.yml`'s `release` job for why.
-   - Publishes `index.html` and `SHA256SUMS.txt` as release assets, built
+   - Publishes `offgridpdf.html` and `SHA256SUMS.txt` as release assets, built
      from the exact commit `verify` just checked.
 5. Once published, spot-check it: download the asset, confirm the checksum
    matches, open it once.
@@ -59,7 +59,7 @@ directly from what this app is:
   to even re-download their own current copy (new machine, lost file,
   reinstall).
 - **The trust model is a published checksum.** The README tells users to
-  verify `index.html` against `SHA256SUMS.txt` from the release before
+  verify `offgridpdf.html` against `SHA256SUMS.txt` from the release before
   running it. If that release later disappears, anyone who saved the
   checksum — in their own notes, in a security review, in an internal audit
   — can no longer verify anything against it. Deleting a release retroactively

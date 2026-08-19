@@ -16,7 +16,7 @@ export const GlassHeader = () => {
             
             <div>
               <h1 className="text-2xl font-display font-bold text-foreground bg-gradient-warm bg-clip-text text-transparent">
-                PDF Utility
+                OffGridPDF
               </h1>
               <div className="flex items-center space-x-1">
                 <Sparkles className="h-3 w-3 text-primary-soft" />
