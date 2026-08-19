@@ -1,8 +1,13 @@
 name: CI
 
 on:
+  # Every branch here gets a PR opened right after it's pushed, so `push` on
+  # every branch and `pull_request` fire twice for the identical commit — two
+  # full `verify` runs (Playwright browser install included) for one push.
+  # `push` only needs to cover what `pull_request` can't: verifying `main`
+  # itself after a merge, and tag pushes for the release job.
   push:
-    branches: ["**"]
+    branches: ["main"]
     tags: ["v*"]
   pull_request:
 
