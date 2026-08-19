@@ -1,5 +1,5 @@
 /**
- * F-1: password-protect a PDF, via qpdf compiled to WASM.
+ * F-1 / F-14: password-protect and compress a PDF, via qpdf compiled to WASM.
  *
  * Neither pdf-lib nor its @cantoo fork can *write* encryption — only read it
  * (see loadPdf in pdf-ops.ts). qpdf can, but @jspawn/qpdf-wasm's loader only
@@ -56,24 +56,26 @@ function wasmDataUrl(): Promise<string> {
   return wasmDataUrlPromise;
 }
 
-function describeFailure(log: string[]): string {
+function describeFailure(log: string[], verb: string): string {
   const text = log.join(' ');
   if (/invalid password/i.test(text)) {
-    return 'This PDF already has a password. Remove its existing protection first (Unlock PDF), then protect it again.';
+    return `This PDF already has a password. Remove its existing protection first (Unlock PDF), then ${verb} it.`;
   }
   if (/can.t find pdf header|can.t find startxref/i.test(text)) {
     return 'This does not look like a valid PDF file.';
   }
-  return `Could not protect this PDF${text ? `: ${text}` : '.'}`;
+  return `Could not ${verb} this PDF${text ? `: ${text}` : '.'}`;
 }
 
 /**
- * Runs one qpdf CLI invocation against `inputBytes` and returns the output
- * file's bytes. Shared by encryptPdfBytes and encryptPdfBytesWithPermissions
- * so both go through the same virtual-filesystem/console-interception
- * mechanics instead of duplicating them.
+ * Runs qpdf with the given CLI args against `inputBytes`, reading the result
+ * back from `out.pdf`. Shared by every qpdf-backed operation so the module
+ * setup, console interception, and error mapping live in one place.
+ *
+ * `verb` only shapes error text (e.g. "protect", "compress") — it has no
+ * effect on what qpdf actually does; that is entirely up to `args`.
  */
-async function runQpdfEncrypt(inputBytes: Uint8Array, args: string[]): Promise<Uint8Array> {
+async function runQpdf(inputBytes: Uint8Array, args: string[], verb: string): Promise<Uint8Array> {
   const dataUrl = await wasmDataUrl();
   const log: string[] = [];
   const originalWarn = console.warn;
@@ -90,13 +92,13 @@ async function runQpdfEncrypt(inputBytes: Uint8Array, args: string[]): Promise<U
     mod.FS.writeFile('in.pdf', inputBytes);
     const exitCode = mod.callMain(args);
     if (exitCode !== 0) {
-      throw new Error(describeFailure(log));
+      throw new Error(describeFailure(log, verb));
     }
 
     try {
       return mod.FS.readFile('out.pdf');
     } catch {
-      throw new Error(describeFailure(log));
+      throw new Error(describeFailure(log, verb));
     }
   } finally {
     console.warn = originalWarn;
@@ -115,7 +117,40 @@ async function runQpdfEncrypt(inputBytes: Uint8Array, args: string[]): Promise<U
  * controls. See encryptPdfBytesWithPermissions (F-17) for that.
  */
 export async function encryptPdfBytes(inputBytes: Uint8Array, password: string): Promise<Uint8Array> {
-  return runQpdfEncrypt(inputBytes, ['--encrypt', password, password, '256', '--', 'in.pdf', 'out.pdf']);
+  return runQpdf(inputBytes, ['--encrypt', password, password, '256', '--', 'in.pdf', 'out.pdf'], 'protect');
+}
+
+/**
+ * Recompresses `inputBytes` (F-14) — mainly embedded images, plus already-
+ * compressed content streams at a higher ratio.
+ *
+ * `--optimize-images` re-encodes images as JPEG when that comes out smaller,
+ * using qpdf's own built-in size thresholds to skip images too small for the
+ * format-conversion overhead to be worth it — deliberately not overridden
+ * here, rather than inventing untested threshold numbers. This step is lossy
+ * for any image it actually re-encodes; callers must disclose that, not
+ * treat compression as free.
+ *
+ * `--recompress-flate --compression-level=9` uncompresses and recompresses
+ * already-flate-compressed content streams at the highest ratio --
+ * `--compress-streams=y` (qpdf's default) only compresses streams that are
+ * currently uncompressed, so most PDFs need this second pass to actually
+ * shrink further.
+ *
+ * `--object-streams=generate` compacts the xref/object tables. This produces
+ * the compressed-xref shape `stripStaleXRefStreamObjects` (pdf-ops.ts) fixed
+ * `loadPdf` to handle safely under **P1-17** — safe to use here as a result.
+ *
+ * Does not attempt to compress an already-encrypted input; qpdf reports a
+ * password error, mapped to a message pointing at Unlock PDF, same as
+ * `encryptPdfBytes` does for a source that's already protected.
+ */
+export async function compressPdfBytes(inputBytes: Uint8Array): Promise<Uint8Array> {
+  return runQpdf(
+    inputBytes,
+    ['--optimize-images', '--recompress-flate', '--compression-level=9', '--object-streams=generate', 'in.pdf', 'out.pdf'],
+    'compress',
+  );
 }
 
 export type PdfPermissions = {
@@ -162,16 +197,20 @@ export async function encryptPdfBytesWithPermissions(
     );
   }
 
-  return runQpdfEncrypt(inputBytes, [
-    '--encrypt',
-    openPassword,
-    permissionsPassword,
-    '256',
-    `--print=${permissions.print}`,
-    `--modify=${permissions.modify}`,
-    `--extract=${permissions.extract ? 'y' : 'n'}`,
-    '--',
-    'in.pdf',
-    'out.pdf',
-  ]);
+  return runQpdf(
+    inputBytes,
+    [
+      '--encrypt',
+      openPassword,
+      permissionsPassword,
+      '256',
+      `--print=${permissions.print}`,
+      `--modify=${permissions.modify}`,
+      `--extract=${permissions.extract ? 'y' : 'n'}`,
+      '--',
+      'in.pdf',
+      'out.pdf',
+    ],
+    'protect',
+  );
 }

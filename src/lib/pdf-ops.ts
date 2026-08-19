@@ -3,7 +3,7 @@
 // actually be opened. Upstream has no `password` load option at all.
 import { PDFDocument, PDFRawStream, PDFInvalidObject, PDFName, degrees } from '@cantoo/pdf-lib';
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
-import { encryptPdfBytes, encryptPdfBytesWithPermissions, type PdfPermissions } from './qpdf-engine';
+import { encryptPdfBytes, encryptPdfBytesWithPermissions, compressPdfBytes, type PdfPermissions } from './qpdf-engine';
 
 /**
  * Strips leftover cross-reference-stream objects from a loaded document
@@ -418,6 +418,25 @@ export async function protectPdfWithPermissions(
 ): Promise<Blob> {
     const inputBytes = new Uint8Array(await file.arrayBuffer());
     const outputBytes = await encryptPdfBytesWithPermissions(inputBytes, openPassword, permissionsPassword, permissions);
+    return new Blob([outputBytes], { type: 'application/pdf' });
+}
+
+/**
+ * Compresses a PDF (F-14) — mainly embedded images, plus recompressing
+ * already-compressed content streams at a higher ratio. See
+ * `compressPdfBytes` (qpdf-engine.ts) for what qpdf actually does and why.
+ *
+ * Does not accept a password: an already-encrypted input is rejected with a
+ * message pointing at Unlock PDF rather than silently stripping or
+ * preserving its protection, which this tool was never asked to decide
+ * between. Compress an unlocked copy instead.
+ *
+ * @param file The PDF file to compress.
+ * @returns A Blob of the compressed PDF file.
+ */
+export async function compressPdf(file: File): Promise<Blob> {
+    const inputBytes = new Uint8Array(await file.arrayBuffer());
+    const outputBytes = await compressPdfBytes(inputBytes);
     return new Blob([outputBytes], { type: 'application/pdf' });
 }
 

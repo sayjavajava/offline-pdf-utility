@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open backlog items: **F-14, F-15, F-16** — written up for later implementation, not started. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented. Open backlog items: **F-15, F-16** — written up for later implementation, not started. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -24,8 +24,9 @@
 | 8 | F-1 | ✅ done — `60b9e85` (see below — the "blocked" verdict was wrong; see the correction) |
 | 8 | F-12 | ✅ done — `4ae3de0` |
 | 8 | F-13 | ✅ done — `dd92468` |
+| 9 | F-14 | ✅ done — `32f5177` |
 | 9 | F-17 | ✅ done — `9644ed4` |
-| 9 | **F-14, F-15** | ⬜ **open — written up, not started. See below.** |
+| 9 | **F-15** | ⬜ **open — written up, not started. See below.** |
 | 9 | **F-16** | ⬜ **open — needs a real spike; initial evidence discourages the obvious approach. See below.** |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
@@ -73,7 +74,7 @@ of this work was not actually running. Both jobs are on Node 22 and `package.jso
 
 **Everything originally scoped in this audit is implemented.** **F-11** stays closed for the product
 reasons above. **F-14–F-17** are a later addition: backlog features written up for future
-implementation, not yet started — see below.
+implementation. **F-14** is done; **F-15–F-17** are not yet started — see below.
 
 ### Worker feasibility on `file://` — measured, not assumed
 
@@ -261,7 +262,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 17 | **3** (F-14, F-15, F-16) | Additive features. F-1–F-10, F-12, F-13, F-17 done; F-11 closed as incompatible; F-14, F-15, F-16 written up, not started. |
+| **F** | 17 | **2** (F-15, F-16) | Additive features. F-1–F-10, F-12–F-14, F-17 done; F-11 closed as incompatible; F-15, F-16 written up, not started. |
 
 ### The three that mattered most — all now fixed
 
@@ -1259,7 +1260,7 @@ output shape, and a second tool for this would just be Split with extra steps.
 single-page PDFs, each opening independently with the right content — proven the same way **T-4**
 proves page identity (via `pageIndicesOf`, not just a page count).
 
-**F-14 · Compress / optimize a PDF — open, scoped below.** Reduces file size, mainly by
+**F-14 · Compress / optimize a PDF — ✅ DONE (`32f5177`).** Reduces file size, mainly by
 recompressing embedded images — a real, common request, and one this app can do with **no new
 dependency**: qpdf (`qpdf-engine.ts`, already bundled for **F-1**) supports it directly.
 
@@ -1289,6 +1290,13 @@ dependency**: qpdf (`qpdf-engine.ts`, already bundled for **F-1**) supports it d
 `--optimize-images`, and the page count and image legibility survive the round trip (embed
 dimensions unchanged, image still decodes) — verified by size comparison plus a reload, not just a
 successful exit code.
+
+**Verified against the real built `file://` app, every non-local request blocked:** a photo-heavy
+2-page PDF (a genuinely noisy generated image, not a flat fill that would compress trivially either
+way) went from 2.9 MB to 227 KB — 92% smaller — with the page count intact and the embedded image's
+`/Filter` reading `/DCTDecode` afterward, confirming actual JPEG re-encoding happened rather than a
+smaller file by coincidence. The already-encrypted-input path was checked too: rejected with the
+"Unlock PDF first" message rather than a raw qpdf error, no download, zero network requests.
 
 **F-15 · Crop / resize pages — open, scoped below.** Two genuinely different operations sharing one
 UI — verified directly from `@cantoo/pdf-lib`'s `PDFPage.ts` source, because the naive version of

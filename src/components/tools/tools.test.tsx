@@ -40,6 +40,7 @@ const mergePdf = vi.fn();
 const removePdfPassword = vi.fn();
 const protectPdf = vi.fn();
 const protectPdfWithPermissions = vi.fn();
+const compressPdf = vi.fn();
 const editPdfMetadata = vi.fn();
 const addWatermark = vi.fn();
 const convertImageToPdf = vi.fn();
@@ -56,6 +57,7 @@ vi.mock("@/lib/pdf-utils", async () => {
     removePdfPassword: (...args: unknown[]) => removePdfPassword(...args),
     protectPdf: (...args: unknown[]) => protectPdf(...args),
     protectPdfWithPermissions: (...args: unknown[]) => protectPdfWithPermissions(...args),
+    compressPdf: (...args: unknown[]) => compressPdf(...args),
     editPdfMetadata: (...args: unknown[]) => editPdfMetadata(...args),
     addWatermark: (...args: unknown[]) => addWatermark(...args),
     convertImageToPdf: (...args: unknown[]) => convertImageToPdf(...args),
@@ -68,6 +70,7 @@ import { SplitTool } from "./SplitTool";
 import { MergeTool } from "./MergeTool";
 import { UnlockTool } from "./UnlockTool";
 import { ProtectTool } from "./ProtectTool";
+import { CompressTool } from "./CompressTool";
 import { EditTool } from "./EditTool";
 import { AddWatermarkTool } from "./AddWatermarkTool";
 import { ConvertTool } from "./ConvertTool";
@@ -83,6 +86,7 @@ beforeEach(() => {
   removePdfPassword.mockReset();
   protectPdf.mockReset();
   protectPdfWithPermissions.mockReset();
+  compressPdf.mockReset();
   editPdfMetadata.mockReset();
   addWatermark.mockReset();
   convertImageToPdf.mockReset();
@@ -400,6 +404,98 @@ describe("ProtectTool (F-1)", () => {
     );
     expect(protectPdf).not.toHaveBeenCalled();
     expect(downloadBlob).toHaveBeenCalled();
+  });
+});
+
+/** A file that passes assertPdfFile's magic-byte + extension check, at an exact size. */
+function pdfFileOfSize(bytes: number, name = "file.pdf"): File {
+  const data = new Uint8Array(bytes);
+  data.set([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
+  return new File([data], name, { type: "application/pdf" });
+}
+
+describe("CompressTool (F-14)", () => {
+  it("guards when no file is selected and never calls compressPdf", async () => {
+    const user = userEvent.setup();
+    render(<CompressTool />);
+    await user.click(screen.getByRole("button", { name: /compress pdf/i }));
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "No file selected", variant: "destructive" }),
+    );
+    expect(compressPdf).not.toHaveBeenCalled();
+  });
+
+  it("calls compressPdf and reports the size reduction on success", async () => {
+    const user = userEvent.setup();
+    const file = pdfFileOfSize(2_000_000, "big.pdf");
+    compressPdf.mockResolvedValue(new Blob([new Uint8Array(1_000_000)]));
+    render(<CompressTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.click(screen.getByRole("button", { name: /compress pdf/i }));
+
+    await waitFor(() => expect(compressPdf).toHaveBeenCalledWith(file));
+    expect(downloadBlob).toHaveBeenCalled();
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Success!",
+        description: expect.stringContaining("50% smaller"),
+      }),
+    );
+  });
+
+  it("does not claim a size reduction when compression did not shrink the file", async () => {
+    const user = userEvent.setup();
+    const file = pdfFileOfSize(1000, "already-small.pdf");
+    // A tiny fixed-size STORE-method output can come back the same size or larger.
+    compressPdf.mockResolvedValue(new Blob([new Uint8Array(1100)]));
+    render(<CompressTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.click(screen.getByRole("button", { name: /compress pdf/i }));
+
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Success!",
+          description: expect.stringContaining("already efficiently compressed"),
+        }),
+      ),
+    );
+  });
+
+  it("surfaces compressPdf's rejection message, e.g. an already-encrypted input", async () => {
+    const user = userEvent.setup();
+    const file = pdfFileOfSize(1000);
+    compressPdf.mockRejectedValue(
+      new Error("This PDF already has a password. Remove its existing protection first (Unlock PDF), then compress it."),
+    );
+    render(<CompressTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.click(screen.getByRole("button", { name: /compress pdf/i }));
+
+    await waitFor(() =>
+      expect(reportToolError).toHaveBeenCalledWith(
+        toastSpy,
+        "Error compressing PDF",
+        expect.objectContaining({ message: expect.stringContaining("Unlock PDF") }),
+      ),
+    );
+  });
+
+  it("still toasts on non-Error rejection (P0-5)", async () => {
+    const user = userEvent.setup();
+    const file = pdfFileOfSize(1000);
+    compressPdf.mockRejectedValue("boom");
+    render(<CompressTool />);
+
+    await upload(screen.getByLabelText(/pdf file/i), file);
+    await user.click(screen.getByRole("button", { name: /compress pdf/i }));
+
+    await waitFor(() =>
+      expect(reportToolError).toHaveBeenCalledWith(toastSpy, "Error compressing PDF", "boom"),
+    );
   });
 });
 
