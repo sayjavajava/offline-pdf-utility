@@ -47,10 +47,12 @@ verified):
 | Extract Text | 2.6s | |
 | Compress | 2.9s | |
 | Crop / Resize | 2.0s | |
-| PDF to Images (preview + full 400-page export) | 20.2s | see caveat below |
+| PDF to Images (preview + full 400-page export) | 20.2s | superseded — see the F-20 section below |
 | Redact (10 real drag-drawn boxes) | 7.2s | includes manual navigation, not just compute |
 
-**17/17 passed** (Convert counted twice: image and DOCX).
+**17/17 passed** (Convert counted twice: image and DOCX). This was a one-time comprehensive pass;
+the PDF to Images preview number above predates the F-20 fix and is kept for the historical
+record, not as the current number — see below for the fixed cost.
 
 ## Results — heavy tier (800 pages / 74.6 MB)
 
@@ -63,7 +65,7 @@ module or doing per-page rendering — re-run against a much heavier, denser doc
 | Split (extract 1-50) | 1.8s |
 | Compress | 7.2s |
 | Protect (AES-256) | 6.1s |
-| PDF to Images preview (renders all 800 pages internally) | 15.6s |
+| PDF to Images preview (renders all 800 pages internally) | 15.6s — superseded, see F-20 below |
 
 Nothing failed, crashed, or hit a memory ceiling at 74.6 MB.
 
@@ -107,6 +109,24 @@ this app's own Extract Text tool as the oracle. Result: pages 1, 2, 3, 4, and 6 
 their marker text gone (genuinely redacted), page 5 — the mismatched-size page, correctly skipped
 — came back with its marker text intact, exactly as the feature promises.
 
+## Results — PDF to Images preview, before/after the F-20 fix
+
+The preview used to internally render *every page* of the document via `renderPdfPages` with no
+`pageNumbers` filter, then throw away all but the first 12 results — a real, avoidable
+main-thread freeze that grew with document size (this path isn't worker-offloaded; it needs a
+canvas, which the app's worker doesn't have access to). Fixed by asking the cheap `getPageCount`
+first and rendering only the pages actually displayed:
+
+| Tier | Pages | Before (rendered every page) | After (renders only 12) |
+|---|---|---|---|
+| Realistic | 400 | 8.4s | 2.5s |
+| Heavy | 800 | 15.6s | 2.5s |
+
+The fix does what the numbers suggest: cost no longer scales with document size at all, since the
+preview now touches a fixed 12 pages regardless of how many the document actually has. The export
+path (what a user actually downloads) was never affected — it already rendered only the pages
+requested.
+
 ## Reproduce it yourself
 
 ```bash
@@ -124,15 +144,6 @@ The core suite covers the operations most likely to regress on a future change �
 worker-dispatched bulk operations, plus both halves of PDF to Images — rather than all 16, to
 keep it fast enough to actually run before a release. The full 16-tool numbers above are a
 point-in-time comprehensive pass using the same methodology and fixture shapes.
-
-## Known issue this testing surfaced
-
-**PDF to Images renders the entire document just to show 12 thumbnails.** The preview always
-internally renders every page — even though it only ever displays the first 12 — which is why
-its numbers above (8.2s at 400 pages, 15.6s at 800) are the outlier: pure wasted work, and a
-real main-thread freeze while it happens (this path isn't worker-offloaded — it needs a canvas,
-which the app's worker doesn't have access to). Being tracked as a fix; the export path itself
-(what a user actually downloads) is unaffected and already fast.
 
 ## What this doesn't tell you
 

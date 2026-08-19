@@ -197,10 +197,12 @@ await timed("Protect (AES-256)", async () => {
   await clickAndDownload(/Protect PDF/i);
 });
 
-// The preview always internally renders every page (see docs/PERFORMANCE.md
-// and the F-20 finding) but only *displays* PREVIEW_LIMIT (12). This
-// measures the real, currently-wasted internal cost.
-await timed("PDF to Images — preview (renders every page, shows 12)", async () => {
+// F-20: the preview used to internally render every page just to display
+// PREVIEW_LIMIT (12) of them — a real main-thread freeze that grew with
+// document size. Fixed to ask the page count first and only ever render
+// what it displays; this should now stay roughly flat regardless of how
+// many pages the document actually has (see docs/PERFORMANCE.md).
+await timed("PDF to Images — preview (only renders the 12 it displays)", async () => {
   await openTool("Convert & Export", "PDF to Images");
   await page.locator("input[type=file]").setInputFiles(bigPdfPath);
   await page.waitForSelector("[data-testid=page-previews] img", { timeout: 180000 });
