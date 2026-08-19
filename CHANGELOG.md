@@ -16,6 +16,10 @@ isn't optional bookkeeping — it's what the release notes are made of.
 
 ### Changed
 
+- The project now has a name: **OffGridPDF**. The downloadable file is
+  `offgridpdf.html` instead of a bare `index.html` — if you're upgrading
+  from an earlier release, the new download replaces it; nothing about how
+  the app works or what it promises has changed.
 - The dashboard now groups tools into four category tabs (Organize Pages,
   Security, Convert & Export, Edit & Enhance) instead of one long list of
   16 cards — only the selected category's tools are shown at once.

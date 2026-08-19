@@ -2,8 +2,31 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { existsSync, renameSync } from "fs";
 import { componentTagger } from "lovable-tagger";
 import { viteSingleFile } from "vite-plugin-singlefile";
+
+const SHIPPED_FILENAME = "offgridpdf.html";
+
+/**
+ * The dev entry stays `index.html` — that's Vite's own convention for both
+ * `vite dev` and `vite build`'s default input, not worth fighting. This just
+ * renames the emitted single-file build after `viteSingleFile()` writes it,
+ * so what users actually download is `offgridpdf.html`, not a bare
+ * `index.html`. Only runs for `vite build` — there is no dist/ to rename
+ * during `vite dev`.
+ */
+function renameShippedOutput() {
+  return {
+    name: "rename-shipped-output",
+    apply: "build" as const,
+    closeBundle() {
+      const from = path.resolve(__dirname, "dist/index.html");
+      const to = path.resolve(__dirname, "dist", SHIPPED_FILENAME);
+      if (existsSync(from)) renameSync(from, to);
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -29,6 +52,7 @@ export default defineConfig(({ mode }) => ({
     mode === 'development' &&
     componentTagger(),
     viteSingleFile(),
+    renameShippedOutput(),
   ].filter(Boolean),
   resolve: {
     alias: {

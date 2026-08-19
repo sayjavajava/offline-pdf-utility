@@ -59,8 +59,8 @@ jobs:
       - name: Upload offline build
         uses: actions/upload-artifact@v4
         with:
-          name: offline-pdf-utility-html
-          path: dist/index.html
+          name: offgridpdf-html
+          path: dist/offgridpdf.html
           if-no-files-found: error
 
   release:
@@ -105,14 +105,14 @@ jobs:
       - name: Download the verified offline build
         uses: actions/download-artifact@v4
         with:
-          name: offline-pdf-utility-html
+          name: offgridpdf-html
           path: release
 
       - name: Checksum the artifact
         id: checksum
         run: |
           cd release
-          sha256sum index.html > SHA256SUMS.txt
+          sha256sum offgridpdf.html > SHA256SUMS.txt
           echo "sha256=$(cut -d ' ' -f 1 SHA256SUMS.txt)" >> "$GITHUB_OUTPUT"
           cat SHA256SUMS.txt
 
@@ -120,16 +120,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/index.html
+            release/offgridpdf.html
             release/SHA256SUMS.txt
           body: |
             ${{ steps.changelog.outputs.notes }}
 
             ---
 
-            Download `index.html` and open it in your browser. That single file
-            is the whole application — no installation, no unzipping, and no
-            network access at any point.
+            Download `offgridpdf.html` and open it in your browser. That single
+            file is the whole application — no installation, no unzipping, and
+            no network access at any point.
 
             **Verify what you downloaded.** This is the exact file this release
             workflow built and checked, not a later rebuild. Its SHA-256 is:
@@ -141,9 +141,9 @@ jobs:
             Check it yourself before trusting it:
 
             ```
-            sha256sum index.html          # Linux
-            shasum -a 256 index.html      # macOS
-            CertUtil -hashfile index.html SHA256   # Windows
+            sha256sum offgridpdf.html          # Linux
+            shasum -a 256 offgridpdf.html      # macOS
+            CertUtil -hashfile offgridpdf.html SHA256   # Windows
             ```
 
             Before publishing, this file passed both offline checks: it is a

@@ -3,7 +3,7 @@
 Verified, not assumed: this documents real runs of the actual built app against synthetic
 large documents, not estimates. Every number below came from `scripts/bench-large-pdf.mjs`
 (the core suite) or a one-time comprehensive pass using the same fixture-generation approach
-(the full 16-tool sweep) — both load the real `dist/index.html` in a real Chromium instance via
+(the full 16-tool sweep) — both load the real `dist/offgridpdf.html` in a real Chromium instance via
 Playwright, the same way `check:offline:runtime` does, and drive each tool exactly as a user
 would: pick a file, fill the form, click the button, wait for the download.
 

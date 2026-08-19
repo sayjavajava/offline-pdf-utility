@@ -32,9 +32,13 @@ import { join } from "node:path";
 const DIST = new URL("../dist/", import.meta.url).pathname;
 const failures = [];
 
+// The single self-contained page vite.config.ts's rename-shipped-output
+// plugin renames dist/index.html to, after the build.
+const MAIN_PAGE = "offgridpdf.html";
+
 // Files the page never requests: they exist only if a host or OS asks for them
 // out-of-band, and their absence does not stop the app working offline.
-const INERT_SIBLINGS = new Set(["index.html", "favicon.ico", "robots.txt", "placeholder.svg"]);
+const INERT_SIBLINGS = new Set([MAIN_PAGE, "favicon.ico", "robots.txt", "placeholder.svg"]);
 
 // ---------------------------------------------------------------------------
 // 1. One self-contained page
@@ -60,7 +64,7 @@ for (const name of entries) {
   }
 }
 
-const html = readFileSync(join(DIST, "index.html"), "utf8");
+const html = readFileSync(join(DIST, MAIN_PAGE), "utf8");
 
 // ---------------------------------------------------------------------------
 // 2. Nothing fetchable points off-machine

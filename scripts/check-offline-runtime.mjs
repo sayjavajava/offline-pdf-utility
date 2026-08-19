@@ -21,9 +21,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 
-const DIST = new URL("../dist/index.html", import.meta.url).href;
-if (!existsSync(new URL("../dist/index.html", import.meta.url).pathname)) {
-  console.error("✗ dist/index.html not found — run `npm run build` first.");
+const DIST = new URL("../dist/offgridpdf.html", import.meta.url).href;
+if (!existsSync(new URL("../dist/offgridpdf.html", import.meta.url).pathname)) {
+  console.error("✗ dist/offgridpdf.html not found — run `npm run build` first.");
   process.exit(1);
 }
 

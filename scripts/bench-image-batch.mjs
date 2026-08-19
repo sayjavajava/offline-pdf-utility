@@ -19,10 +19,10 @@ import { deflateSync } from "node:zlib";
 import { randomBytes } from "node:crypto";
 import { PDFDocument } from "@cantoo/pdf-lib";
 
-const DIST_PATH = new URL("../dist/index.html", import.meta.url).pathname;
+const DIST_PATH = new URL("../dist/offgridpdf.html", import.meta.url).pathname;
 const DIST = "file://" + DIST_PATH;
 if (!existsSync(DIST_PATH)) {
-  console.error("✗ dist/index.html not found — run `npm run build` first.");
+  console.error("✗ dist/offgridpdf.html not found — run `npm run build` first.");
   process.exit(1);
 }
 
