@@ -70,6 +70,34 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only CHANGELOG.md is needed here — the build artifact comes from the
+      # `verify` job below, not from this checkout.
+      - uses: actions/checkout@v4
+
+      # Release notes come from CHANGELOG.md, not a fixed template: find the
+      # `## [X.Y.Z]` section matching this tag and use its body verbatim.
+      # Fails the release rather than shipping without notes — the same
+      # "ratchet, not aspiration" treatment as the offline checks and the
+      # coverage thresholds elsewhere in this repo.
+      - name: Extract this release's changelog section
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk -v ver="## [$VERSION]" '
+            index($0, ver) == 1 { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "::error::No CHANGELOG.md section found for version $VERSION. Add a '## [$VERSION] - YYYY-MM-DD' section (renaming ## [Unreleased]) before tagging."
+            exit 1
+          fi
+          {
+            echo "notes<<CHANGELOG_EOF"
+            echo "$NOTES"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       # Publish the exact file `verify` checked, rather than building again
       # here. A rebuild is a different artifact that nothing has proven makes
       # zero network requests — and the promise users are asked to trust is
@@ -95,6 +123,10 @@ jobs:
             release/index.html
             release/SHA256SUMS.txt
           body: |
+            ${{ steps.changelog.outputs.notes }}
+
+            ---
+
             Download `index.html` and open it in your browser. That single file
             is the whole application — no installation, no unzipping, and no
             network access at any point.
