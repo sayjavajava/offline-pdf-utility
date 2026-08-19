@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open backlog items: **F-16** — needs a fresh idea; two attempts have been dropped, see below. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented and every feature in the current backlog is done. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -27,7 +27,7 @@
 | 9 | F-14 | ✅ done — `32f5177` |
 | 9 | F-15 | ✅ done — `9f7e38c` |
 | 9 | F-17 | ✅ done — `9644ed4` |
-| 9 | **F-16** | ⬜ **open — spike done, negative on both Repair and a Diagnose fallback; see below for what's still on the table.** |
+| 9 | F-16 | ✅ done — `3c364b7` (retargeted to Redact PDF after Repair and Diagnose were both dropped; see below) |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
 ### The one feature that cannot be built as specified
@@ -262,7 +262,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 17 | **1** (F-16) | Additive features. F-1–F-10, F-12–F-15, F-17 done; F-11 closed as incompatible; F-16 spiked twice, nothing shipped. |
+| **F** | 17 | **0** | Additive features. F-1–F-10, F-12–F-17 done; F-11 closed as incompatible. F-16 retargeted from "Repair a damaged PDF" to Redact PDF after two dropped attempts — see below. |
 
 ### The three that mattered most — all now fixed
 
@@ -1363,9 +1363,9 @@ Unit tests separately pin the reference-point claim directly: a marker's `Tm` co
 unchanged post-resize (confirming the `cm`-wrapper mechanism, not a coordinate rewrite), and
 `Tm * scaleFactor` lands exactly on the new box's own coordinates.
 
-**F-16 · Repair a damaged PDF — open; two attempts dropped, needs a fresh idea.** The obvious
-assumption — qpdf is purpose-built for this, wire it up — **did not survive testing**, and this
-section exists specifically so that assumption doesn't get re-made without re-checking it.
+**F-16 · Redact PDF — ✅ DONE (`3c364b7`), retargeted after two dropped attempts at "Repair a
+damaged PDF."** The history below is kept because it's the reason this slot changed scope, not
+because either attempt should be re-tried without re-checking the same evidence.
 
 **What was actually tested:** corrupted variants of a source PDF, built and checked directly (not
 from documentation) against both this app's current `loadPdf` (`@cantoo/pdf-lib`) and qpdf's
@@ -1395,8 +1395,59 @@ too thin to keep. The build-and-test work is discarded along with it (see the cl
 [#16](https://github.com/sayjavajava/offline-pdf-utility/pull/16) for what it looked like, if this
 gets revisited).
 
-**Still open:** F-16 needs a genuinely different idea, not a third attempt at repair/diagnose framing
-— open to product direction on what that should be.
+**What shipped instead: Redact PDF.** The user picks the direction from a short list of concrete
+options after both attempts above were dropped — permanently remove content under user-drawn boxes,
+not just draw over it. Covering text or an image with an opaque rectangle is a well-known real bug in
+cheap redaction tools: the original content stream is untouched underneath, so the "redacted" text is
+still selectable, copyable, and searchable straight through the box. This finding exists to not do
+that.
+
+**The approach, and why it genuinely deletes rather than covers:** any page carrying at least one
+redaction box is rasterized via pdf.js (`renderPdfPages`, the same renderer F-4/F-5 use) with the box
+baked into the pixels *before* re-encoding, then rebuilt in the output as a plain embedded image —
+no text layer, no annotations, no copied content stream at all. There is no "content underneath" left
+for a box to fail to cover, because nothing from the original page survives redaction except pixels.
+Pages with no redaction boxes are copied through unchanged (`copyPages`, the same pattern
+splitPdf/mergePdf/rearrangePdf already use), so the rest of the document keeps its real, searchable
+text layer — this is a per-page, targeted operation, not a blanket "flatten the whole file."
+
+**Coordinate math, the one place most likely to hide a bug:** PDF space is bottom-left-origin
+(`page.getSize()`/`drawRectangle`'s own convention), canvas/image space is top-left-origin, so every
+box has to be flipped on its way from a mouse drag to a filled rectangle. That conversion
+(`toPixelRect` in `pdf-redact.ts`) is a pure function specifically so it can be unit tested directly
+without needing a real canvas: a box near the PDF-space bottom of a page lands near the image-space
+*bottom* of the raster, not the top, pinned as an explicit test case rather than inferred from the
+feature working end-to-end.
+
+**Where this stays off the worker:** like `pdf-render.ts` (F-4/F-5) and `docx-convert.ts`, redaction
+stays on the main thread rather than routing through `pdf-utils.ts`'s worker dispatch — rendering
+needs a canvas, which the app's own Worker (F-9) has no access to. `redactPdf` is exported directly
+from `pdf-utils.ts`, bypassing the generic `run()` wrapper, matching `convertDocxToPdf`'s existing
+carve-out.
+
+**Testing split, and why:** confirmed directly (not assumed) that jsdom's `canvas.getContext('2d')`
+returns `null` and `createImageBitmap` is `undefined` in this project's actual test environment — the
+`canvas` npm package jsdom would delegate to isn't installed — so `pdf-redact.ts` joins
+`pdf-render.ts`/`qpdf-engine.ts` in the `vite.config.ts` coverage exclusion; its pure coordinate math
+and validation paths are still unit tested (`pdf-redact.test.ts`), just not counted there since the
+file as a whole can't execute under jsdom. The full render-box-embed pipeline is verified against the
+real built app instead.
+
+**Accept, and how it was actually verified against the real built app** (Playwright, `file://`, every
+non-local request blocked, 0 network requests) — using the app's own already-verified tools as
+oracles rather than hand-decoding the output PDF's internal image encoding: a 2-page source PDF with
+a text marker near the top of page 1 and a red square near the bottom, well clear of it, and separate
+text on page 2. (1) Drawing a box over the marker via real mouse drag-and-drop on the rendered preview
+enables Apply and produces a download. (2) Feeding the result through the app's own **Extract Text**
+tool: page 1 yields **zero text at all** — not just the marker gone, the entire page has no text
+layer, proving full rasterization rather than a box drawn over surviving text — while page 2 still
+yields its original text unchanged. (3) Feeding the result through the app's own **PDF to Images**
+tool and reading pixels in-browser: the drawn box reads solid black (`[0,0,0,255]`), and the red
+square — on the *same*, redacted page, just outside the box — still reads red (`[255,0,0,255]`),
+proving this is a targeted redaction of the drawn region, not a full-page wipe disguised as one.
+Component tests separately pin the drag-to-rect wiring end to end (a drag from pixel `(10,10)` to
+`(50,40)` on a mocked 300×450 render at 1.5x preview scale produces exactly the `27×20pt` box the
+hand-derived math predicts) and that `redactPdf` receives the expected `{pageNumber: rects[]}` shape.
 
 **F-17 · Permissions on Protect PDF — ✅ DONE (`9644ed4`).** `qpdf --help=encryption` (verified, not
 assumed) supports real restriction flags at the 256-bit strength **F-1** already uses:
