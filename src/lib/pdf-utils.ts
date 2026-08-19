@@ -12,6 +12,7 @@
  */
 import * as ops from './pdf-ops';
 import { convertDocxToPdf as convertDocxToPdfImpl } from './docx-convert';
+import { redactPdf as redactPdfImpl } from './pdf-redact';
 import { runInWorker, workerAvailable } from './run-in-worker';
 
 export type {
@@ -26,6 +27,7 @@ export type {
   PaperSize,
 } from './pdf-ops';
 export type { ExtractedImage, ExtractImagesResult } from './image-extract';
+export type { RedactionRect } from './pdf-redact';
 
 // Pure and cheap — no reason to pay a round trip.
 export const parsePageRange = ops.parsePageRange;
@@ -87,3 +89,10 @@ export const resizePdf = (...a: Parameters<typeof ops.resizePdf>) => run('resize
  * scope (confirmed in a real browser — see docx-convert.ts).
  */
 export const convertDocxToPdf = convertDocxToPdfImpl;
+
+/**
+ * Redaction also stays on the main thread: it rasterizes via pdf.js, which
+ * needs a canvas the app's own Worker (F-9) has no access to — same
+ * constraint pdf-render.ts documents for F-4/F-5.
+ */
+export const redactPdf = redactPdfImpl;
