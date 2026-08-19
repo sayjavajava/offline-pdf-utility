@@ -14,6 +14,7 @@ import {
   FileImage,
   FileType,
   FileArchive,
+  Crop,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ import { ExtractImagesTool } from './tools/ExtractImagesTool';
 import { PdfToImagesTool } from './tools/PdfToImagesTool';
 import { ExtractTextTool } from './tools/ExtractTextTool';
 import { CompressTool } from './tools/CompressTool';
+import { CropResizeTool } from './tools/CropResizeTool';
 
 const pdfTools = [
   {
@@ -117,6 +119,12 @@ const pdfTools = [
     description: "Shrink a PDF, mainly by recompressing its embedded images.",
     icon: FileArchive,
   },
+  {
+    id: "cropresize",
+    title: "Crop / Resize Pages",
+    description: "Trim margins non-destructively, or rescale pages to a target size.",
+    icon: Crop,
+  },
 ];
 
 export const GlassDashboard = () => {
@@ -173,6 +181,7 @@ export const GlassDashboard = () => {
             {activeTool === 'pdftoimages' && <PdfToImagesTool />}
             {activeTool === 'extracttext' && <ExtractTextTool />}
             {activeTool === 'compress' && <CompressTool />}
+            {activeTool === 'cropresize' && <CropResizeTool />}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">

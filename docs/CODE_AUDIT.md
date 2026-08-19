@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open backlog items: **F-15, F-16** — written up for later implementation, not started. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented. Open backlog items: **F-16** — needs a fresh idea; two attempts have been dropped, see below. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -25,9 +25,9 @@
 | 8 | F-12 | ✅ done — `4ae3de0` |
 | 8 | F-13 | ✅ done — `dd92468` |
 | 9 | F-14 | ✅ done — `32f5177` |
+| 9 | F-15 | ✅ done — `9f7e38c` |
 | 9 | F-17 | ✅ done — `9644ed4` |
-| 9 | **F-15** | ⬜ **open — written up, not started. See below.** |
-| 9 | **F-16** | ⬜ **open — needs a real spike; initial evidence discourages the obvious approach. See below.** |
+| 9 | **F-16** | ⬜ **open — spike done, negative on both Repair and a Diagnose fallback; see below for what's still on the table.** |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
 ### The one feature that cannot be built as specified
@@ -262,7 +262,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 17 | **2** (F-15, F-16) | Additive features. F-1–F-10, F-12–F-14, F-17 done; F-11 closed as incompatible; F-15, F-16 written up, not started. |
+| **F** | 17 | **1** (F-16) | Additive features. F-1–F-10, F-12–F-15, F-17 done; F-11 closed as incompatible; F-16 spiked twice, nothing shipped. |
 
 ### The three that mattered most — all now fixed
 
@@ -1298,7 +1298,7 @@ way) went from 2.9 MB to 227 KB — 92% smaller — with the page count intact a
 smaller file by coincidence. The already-encrypted-input path was checked too: rejected with the
 "Unlock PDF first" message rather than a raw qpdf error, no download, zero network requests.
 
-**F-15 · Crop / resize pages — open, scoped below.** Two genuinely different operations sharing one
+**F-15 · Crop / resize pages — ✅ DONE (`9f7e38c`).** Two genuinely different operations sharing one
 UI — verified directly from `@cantoo/pdf-lib`'s `PDFPage.ts` source, because the naive version of
 this is easy to get wrong (see below):
 
@@ -1331,46 +1331,72 @@ changed); resizing to A4 with scale-to-fit produces content that is proportional
 centered — verified by checking a known reference point's coordinates moved by the expected scale
 factor, not merely that the MediaBox now reads A4 dimensions.
 
-**F-16 · Repair a damaged PDF — open, needs a real spike first; initial evidence is discouraging.**
-The obvious assumption — qpdf is purpose-built for this, wire it up — **did not survive testing**,
-and this section exists specifically so that assumption doesn't get re-made without re-checking it.
+**What shipped and how it was verified.** `cropPdf`/`resizePdf` in `pdf-ops.ts`, wired through the
+worker exactly like every other operation (no special-casing needed — `pdf.worker.ts` dispatches by
+function name), plus a `CropResizeTool` with a Crop/Resize mode toggle: numeric per-edge margins for
+Crop, a paper-size dropdown (A4/Letter/Legal/Custom) with an opt-in stretch checkbox for Resize.
 
-**What was actually tested:** four corrupted variants of the same source PDF, built and checked
-directly (not from documentation) against both this app's current `loadPdf` (`@cantoo/pdf-lib`) and
-qpdf's default recovery (`qpdf in.pdf out.pdf`; qpdf's error recovery is on by default —
-`--suppress-recovery` is what turns it *off*):
+The exact centering math for Resize was derived from reading `scale()`'s source and then confirmed
+against the library's *actual output*, not assumed from the reading alone — the same discipline
+established for F-1 and P1-17. Building a page, drawing a text marker, calling `scale(0.5, 0.5)`, and
+decompressing the resulting content stream directly showed `scaleContent` prepends a `q` / `<sx> 0 0
+<sy> 0 0 cm` / … / `Q` wrapper around the *existing* content rather than rewriting each drawing
+operator's coordinates — so a marker drawn at absolute `(50, 50)` stays literally `50 50` in the `Tm`
+operator, and is repositioned by the reader applying the prepended matrix on top, scaling from the
+PDF coordinate origin `(0,0)`. Critically, `setSize` (which `scale()` also calls) anchors the new
+box's lower-left corner to the box's *own* current `x,y`, not to `(0,0)` — so for a page whose
+MediaBox does not start at the origin, the scaled content's own origin (`box.x * sx`) and the box's
+own origin (still `box.x`) diverge. The implementation's own `setMediaBox` call has to correct for
+that divergence, not just for centering — confirmed by testing against a page with a deliberately
+non-zero-origin MediaBox (`setMediaBox(10, 20, 300, 300)` before resizing), where the naive
+zero-origin formula would have put the box off by exactly the pre-existing offset.
 
-| Corruption | `loadPdf` today | qpdf default recovery |
-|---|---|---|
-| `startxref` missing entirely (severe truncation) | fails | **also fails** — `can't find startxref` |
-| `startxref` present, points past EOF; compressed xref **stream** | **recovers on its own** | **fails** — `expected n n obj` |
-| Same corruption, classic xref **table** | **recovers on its own** | not re-tested against qpdf in this spike |
-| Corrupted `/Length` on a content stream | **recovers on its own** | not re-tested against qpdf in this spike |
+Verified against the real built app (Playwright, `file://`, all non-local requests blocked, 0
+network requests): (1) cropping a 200×200 page by `top=10, bottom=20, left=5, right=15` produced
+`CropBox = {x:5, y:20, width:180, height:170}` with `MediaBox` unchanged at `{0,0,200,200}`; (2)
+resizing that same page to A4 with the default scale-to-fit produced `MediaBox = {x:0, y:-123.305,
+width:595.28, height:841.89}` — the exact target dimensions, with `x` at `0` (width is the binding
+edge for a square source against A4's portrait ratio, so no horizontal offset) and `y` at the
+precise computed centering offset, not just "some" offset; (3) an already-encrypted file without a
+password produces the existing readable "password protected" error rather than a raw failure.
+Unit tests separately pin the reference-point claim directly: a marker's `Tm` coordinates are
+unchanged post-resize (confirming the `cm`-wrapper mechanism, not a coordinate rewrite), and
+`Tm * scaleFactor` lands exactly on the new box's own coordinates.
 
-The one directly-comparable case found **qpdf's repair worse than what this app's `loadPdf` already
-tolerates today, for free, with no new code** — the opposite of the assumption this finding started
-from. `@cantoo/pdf-lib` turns out to already have real fallback recovery for bad xref offsets; qpdf's
-default recovery, at least for the xref-stream shape, does not reach as far.
+**F-16 · Repair a damaged PDF — open; two attempts dropped, needs a fresh idea.** The obvious
+assumption — qpdf is purpose-built for this, wire it up — **did not survive testing**, and this
+section exists specifically so that assumption doesn't get re-made without re-checking it.
 
-**What a real spike needs before this is scoped as a feature:** damaged files sourced from something
-real — bug reports against other PDF tools, or files with genuine corruption from an interrupted
-download or disk fault, not more synthetic ones like the table above — to find an actual case where
-`loadPdf` fails **and** qpdf (default recovery, or another mode not yet tried, such as forcing a full
-linear object scan) succeeds. Until a case like that is found and confirmed, do not implement this as
-"route damaged files through qpdf" on the strength of qpdf's own documentation alone.
+**What was actually tested:** corrupted variants of a source PDF, built and checked directly (not
+from documentation) against both this app's current `loadPdf` (`@cantoo/pdf-lib`) and qpdf's
+recovery (`qpdf in.pdf out.pdf`; qpdf's error recovery is on by default — `--suppress-recovery` is
+what turns it *off*). Extended to a full matrix: 2 base xref shapes (classic table, compressed
+stream) × 3 corruption types (missing `startxref`, `startxref` past EOF, corrupted stream
+`/Length`) × 3 qpdf strategies (default, `--ignore-xref-streams`, `--qdf`) = 18 attempts.
 
-**Fallback scope if the spike comes up empty:** a much smaller, safer **Diagnose** tool instead of
-"Repair" — run `--check` (read-only; qpdf's own words: *"does not perform any validation of the
-actual PDF page content or semantic correctness... merely checks that the PDF file is syntactically
-valid"*; exit 0 clean / 2 errors / 3 warnings-only) and show the user qpdf's structural report.
-`@cantoo/pdf-lib` has no equivalent diagnostic output of its own — it only throws or succeeds. This
-has real, honest value (tell a user *why* their PDF won't open) without promising a fix that may not
-exist.
+**qpdf recovered zero of them.** `loadPdf` (`@cantoo/pdf-lib`, unmodified — no new code) opened and
+read pages back from all 6 corrupted files. `qpdf --help=all` was searched for every flag mentioning
+recovery, reconstruction, or repair — the only one that exists is `--suppress-recovery`, which
+*disables* recovery; there is no alternate or stronger mode to opt into. A real-world search (per
+this finding's own bar: synthetic corruption alone isn't enough) turned up
+[Hopding/pdf-lib#454](https://github.com/Hopding/pdf-lib/issues/454), a genuine bug report — but a
+different failure shape than what this needs: pdf-lib *loads* the file fine and only produces a bad
+*resave* after merging, rather than failing to load it at all. No real "loadPdf fails, qpdf succeeds"
+case turned up, synthetic or real. **"Repair a damaged PDF" is dropped** — qpdf's recovery has never
+once done anything this app's own loader doesn't already do for free.
 
-**Accept:** either (a) qpdf genuinely repairs a real damaged file `loadPdf` cannot open today,
-verified by successfully reading content back out of the repaired file afterward — not just a clean
-exit code — or (b) if the spike finds no such case, ship `--check` alone as a read-only diagnostic
-and record here why "repair" was dropped in favor of "diagnose."
+**Second attempt, also dropped:** the fallback scoped here — a read-only **Diagnose** tool wrapping
+qpdf's `--check` (report a file's structural health without promising a fix) — was fully built,
+tested (unit tests running the real qpdf WASM module, plus real-browser Playwright verification) and
+shipped in a PR. It was **cut on product grounds, not a technical failure**: told a user *why* their
+PDF wouldn't open, but did nothing to actually help them beyond that, and every corruption this app's
+own tools will ever plausibly see already opens fine without any tool at all — the value was judged
+too thin to keep. The build-and-test work is discarded along with it (see the closed PR
+[#16](https://github.com/sayjavajava/offline-pdf-utility/pull/16) for what it looked like, if this
+gets revisited).
+
+**Still open:** F-16 needs a genuinely different idea, not a third attempt at repair/diagnose framing
+— open to product direction on what that should be.
 
 **F-17 · Permissions on Protect PDF — ✅ DONE (`9644ed4`).** `qpdf --help=encryption` (verified, not
 assumed) supports real restriction flags at the 256-bit strength **F-1** already uses:
