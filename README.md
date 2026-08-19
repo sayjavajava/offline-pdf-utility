@@ -182,6 +182,10 @@ GPL-3.0-or-later. See [`LICENSE`](LICENSE).
 
 We welcome contributions! If you have an idea for a new feature or have found a bug, please open an issue to discuss it. Pull requests are also welcome. Add a bullet to [`CHANGELOG.md`](CHANGELOG.md)'s `## [Unreleased]` section as part of your PR if it's user-facing — see [`RELEASING.md`](RELEASING.md) for the full release process, including what happens to older versions once a new one ships.
 
+## Support
+
+This project is free and always will be — no ads, no telemetry, no paid tiers. If it's useful to you, you can support development via [GitHub Sponsors](https://github.com/sponsors/sayjavajava) or [Buy Me a Coffee](https://buymeacoffee.com/sayjavajava).
+
 ## Contact
 
 For any questions or feedback, please reach out via [GitHub Issues](../../issues).
