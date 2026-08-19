@@ -14,6 +14,12 @@ isn't optional bookkeeping — it's what the release notes are made of.
 
 ## [Unreleased]
 
+### Added
+
+- **Convert to PDF**: select several JPEG/PNG images at once to combine them
+  into one multi-page PDF, in the order shown, instead of converting each one
+  separately and merging them afterward.
+
 ## [0.2.0] - 2026-08-19
 
 Five new tools, a security fix, and a full dependency vulnerability cleanup —

@@ -500,26 +500,41 @@ export function detectImageFormat(file: File, bytes: ArrayBuffer): ImageFormat |
 }
 
 /**
- * Converts an image file (JPEG or PNG) to a PDF.
- * @param file The image file to convert.
+ * Converts one or more image files (JPEG or PNG) to a PDF — one page per
+ * image, in the given order. A single file produces a single-page PDF, the
+ * same as before; passing several combines them into one multi-page PDF
+ * instead of requiring a separate Merge step (F-22).
+ * @param files The image files to convert, in output order.
  * @returns A Blob of the new PDF file.
  */
-export async function convertImageToPdf(file: File): Promise<Blob> {
-    const pdfDoc = await PDFDocument.create();
-    const imageBytes = await file.arrayBuffer();
-    const format = detectImageFormat(file, imageBytes);
-
-    let image;
-    if (format === 'jpeg') {
-        image = await pdfDoc.embedJpg(imageBytes);
-    } else if (format === 'png') {
-        image = await pdfDoc.embedPng(imageBytes);
-    } else {
-        throw new Error('Unsupported image type. Please use JPEG or PNG.');
+export async function convertImageToPdf(files: File[]): Promise<Blob> {
+    if (files.length === 0) {
+        throw new Error('Select at least one image.');
     }
 
-    const page = pdfDoc.addPage([image.width, image.height]);
-    page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+    const pdfDoc = await PDFDocument.create();
+
+    for (const file of files) {
+        const imageBytes = await file.arrayBuffer();
+        const format = detectImageFormat(file, imageBytes);
+
+        let image;
+        try {
+            if (format === 'jpeg') {
+                image = await pdfDoc.embedJpg(imageBytes);
+            } else if (format === 'png') {
+                image = await pdfDoc.embedPng(imageBytes);
+            } else {
+                throw new Error('Unsupported image type. Please use JPEG or PNG.');
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`"${file.name}": ${message}`);
+        }
+
+        const page = pdfDoc.addPage([image.width, image.height]);
+        page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+    }
 
     const pdfBytes = await pdfDoc.save();
     return new Blob([pdfBytes], { type: 'application/pdf' });
