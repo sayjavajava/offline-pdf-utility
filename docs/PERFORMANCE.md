@@ -85,6 +85,28 @@ worker, unlike Redact or DOCX conversion), so the UI stays responsive while it r
 heavy tier. Both runs produced the exact expected page count — verified by loading the actual
 downloaded PDF, not just checking that a download happened.
 
+## Results — Redact "apply to other pages" (F-21)
+
+Redact now scans every page's size (`getPageSizes`) as soon as a file is selected, to know which
+pages a drawn box can safely be copied onto (a box copied onto a differently-sized page would
+land in the wrong place — see the F-21 write-up). `getPageSizes` only reads each page's
+`/MediaBox`, no canvas or content-stream decoding, so it's a different cost shape from
+`renderPdfPages` despite touching every page too:
+
+| Tier | Pages | Size | Page-size scan |
+|---|---|---|---|
+| Realistic | 400 | 5.8 MB | 2.1s |
+| Heavy | 800 | 74.6 MB | 2.6s |
+
+Included in `scripts/bench-large-pdf.mjs`'s core suite (`npm run bench:large-pdf`). The actual
+redact-and-apply step (drawing a box, copying it across a range, downloading the result) isn't
+part of the reproducible suite — it needs real mouse-drag simulation, not just a file upload — but
+was verified end to end against the real built app: a 6-page fixture with one deliberately
+differently-sized page, a box drawn on page 1, applied to pages 2–6, downloaded, then fed into
+this app's own Extract Text tool as the oracle. Result: pages 1, 2, 3, 4, and 6 came back with
+their marker text gone (genuinely redacted), page 5 — the mismatched-size page, correctly skipped
+— came back with its marker text intact, exactly as the feature promises.
+
 ## Reproduce it yourself
 
 ```bash
