@@ -45,10 +45,10 @@ vi.mock("@/lib/pdf-utils", async () => {
 });
 
 const renderPdfPages = vi.fn();
-const getPageCount = vi.fn();
+const getPageSizes = vi.fn();
 vi.mock("@/lib/pdf-render", () => ({
   renderPdfPages: (...args: unknown[]) => renderPdfPages(...args),
-  getPageCount: (...args: unknown[]) => getPageCount(...args),
+  getPageSizes: (...args: unknown[]) => getPageSizes(...args),
 }));
 
 import { RedactTool } from "./RedactTool";
@@ -59,9 +59,9 @@ beforeEach(() => {
   reportToolError.mockClear();
   redactPdf.mockReset();
   renderPdfPages.mockReset();
-  getPageCount.mockReset();
+  getPageSizes.mockReset();
   renderPdfPages.mockResolvedValue([{ pageNumber: 1, bytes: new Uint8Array([1, 2, 3]), width: 300, height: 450 }]);
-  getPageCount.mockResolvedValue(1);
+  getPageSizes.mockResolvedValue([{ width: 200, height: 300 }]);
   // jsdom has no real object-URL/blob machinery worth exercising here.
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
@@ -70,6 +70,20 @@ beforeEach(() => {
 const upload = async (input: HTMLElement, file: File) => {
   await userEvent.setup().upload(input, file);
 };
+
+/** Stubs the rendered page image's box/natural size (1:1, no CSS scaling) and
+ * drags a fixed rectangle across it — the same shape every existing test
+ * uses, factored out for the F-21 tests below. */
+function stubAndDrag(img: HTMLElement) {
+  vi.spyOn(img, "getBoundingClientRect").mockReturnValue({
+    left: 0, top: 0, width: 200, height: 300, right: 200, bottom: 300, x: 0, y: 0, toJSON() { return {}; },
+  });
+  Object.defineProperty(img, "naturalWidth", { value: 200, configurable: true });
+  Object.defineProperty(img, "naturalHeight", { value: 300, configurable: true });
+  fireEvent.mouseDown(img, { clientX: 10, clientY: 10 });
+  fireEvent.mouseMove(img, { clientX: 50, clientY: 40 });
+  fireEvent.mouseUp(img, { clientX: 50, clientY: 40 });
+}
 
 describe("RedactTool (T-10 / F-16)", () => {
   it("disables Apply until at least one box is drawn", async () => {
@@ -155,5 +169,138 @@ describe("RedactTool (T-10 / F-16)", () => {
 
     await user.click(screen.getByRole("button", { name: /remove/i }));
     expect(screen.getByRole("button", { name: /apply redactions/i })).toBeDisabled();
+  });
+});
+
+describe("RedactTool — apply box to other pages (F-21)", () => {
+  it("copies a page's box to every page in an explicit range", async () => {
+    const user = userEvent.setup();
+    getPageSizes.mockResolvedValue([
+      { width: 200, height: 300 },
+      { width: 200, height: 300 },
+      { width: 200, height: 300 },
+    ]);
+    redactPdf.mockResolvedValue(new Blob(["x"]));
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(3));
+
+    const img = await screen.findByAltText(/page 1/i);
+    stubAndDrag(img);
+    await waitFor(() => expect(screen.getByLabelText(/apply this page's box/i)).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText(/apply this page's box/i), "2-3");
+    await user.click(screen.getByRole("button", { name: /^apply$/i }));
+
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Applied", description: expect.stringMatching(/copied 1 box to 2 pages/i) }),
+      ),
+    );
+
+    // Page 2 and 3 should now report a box too, purely from redactions state.
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(await screen.findByText(/page 2 of 3 — 1 box/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(await screen.findByText(/page 3 of 3 — 1 box/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /apply redactions/i }));
+    await waitFor(() => expect(redactPdf).toHaveBeenCalled());
+    const [, redactions] = redactPdf.mock.calls[0];
+    expect(Object.keys(redactions).sort()).toEqual(["1", "2", "3"]);
+    expect(redactions[1]).toHaveLength(1);
+    expect(redactions[2]).toHaveLength(1);
+    expect(redactions[3]).toHaveLength(1);
+    // Same rect copied, not independently drawn.
+    expect(redactions[2][0]).toEqual(redactions[1][0]);
+    expect(redactions[3][0]).toEqual(redactions[1][0]);
+  });
+
+  it("applies to every other page when the range is left blank", async () => {
+    const user = userEvent.setup();
+    getPageSizes.mockResolvedValue([
+      { width: 200, height: 300 },
+      { width: 200, height: 300 },
+      { width: 200, height: 300 },
+    ]);
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(3));
+
+    const img = await screen.findByAltText(/page 1/i);
+    stubAndDrag(img);
+    await waitFor(() => expect(screen.getByLabelText(/apply this page's box/i)).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: /^apply$/i }));
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ description: expect.stringMatching(/copied 1 box to 2 pages/i) }),
+      ),
+    );
+  });
+
+  it("skips pages whose size differs from the source page, and names them", async () => {
+    const user = userEvent.setup();
+    getPageSizes.mockResolvedValue([
+      { width: 200, height: 300 }, // page 1 — source
+      { width: 200, height: 300 }, // page 2 — matches
+      { width: 400, height: 600 }, // page 3 — different size, skip
+    ]);
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(3));
+
+    const img = await screen.findByAltText(/page 1/i);
+    stubAndDrag(img);
+    await waitFor(() => expect(screen.getByLabelText(/apply this page's box/i)).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText(/apply this page's box/i), "2-3");
+    await user.click(screen.getByRole("button", { name: /^apply$/i }));
+
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Applied, with some pages skipped",
+          description: expect.stringMatching(/skipped 1 page.*different page size.*: 3/i),
+        }),
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(await screen.findByText(/page 2 of 3 — 1 box/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    // Page 3 was skipped for size mismatch — no box, no "— N box" suffix.
+    expect(await screen.findByText(/^page 3 of 3$/i)).toBeInTheDocument();
+  });
+
+  it("rejects an invalid page range without applying anything", async () => {
+    const user = userEvent.setup();
+    getPageSizes.mockResolvedValue([
+      { width: 200, height: 300 },
+      { width: 200, height: 300 },
+      { width: 200, height: 300 },
+    ]);
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(3));
+
+    const img = await screen.findByAltText(/page 1/i);
+    stubAndDrag(img);
+    await waitFor(() => expect(screen.getByLabelText(/apply this page's box/i)).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText(/apply this page's box/i), "abc");
+    await user.click(screen.getByRole("button", { name: /^apply$/i }));
+
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Invalid page range", variant: "destructive" }),
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    expect(await screen.findByText(/^page 2 of 3$/i)).toBeInTheDocument();
+  });
+
+  it("does not offer Apply until a box has been drawn on the page", async () => {
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(2));
+    await screen.findByAltText(/page 1/i);
+    expect(screen.queryByLabelText(/apply this page's box/i)).not.toBeInTheDocument();
   });
 });

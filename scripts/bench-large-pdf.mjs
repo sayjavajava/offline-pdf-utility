@@ -129,9 +129,14 @@ async function timed(label, fn) {
     console.log(`  ✗ ${label}: FAILED after ${ms}ms — ${String(err).split("\n")[0]}`);
   }
 }
-async function openTool(name) {
+// Tools are grouped under category tabs (F-23) — only the active category's
+// cards are in the DOM, so the right tab has to be selected before a tool's
+// h3 can be found at all.
+async function openTool(category, name) {
   await page.goto(DIST, { waitUntil: "load" });
   await page.waitForTimeout(300);
+  await page.locator("[data-testid=category-tabs] button", { hasText: category }).click();
+  await page.waitForTimeout(150);
   await page.locator("h3", { hasText: name }).first().click();
   await page.waitForTimeout(300);
 }
@@ -147,7 +152,7 @@ async function clickAndDownload(buttonNameRegex, timeout = 120000) {
 console.log(`\nRunning tools against the ${PAGES}-page / ${sizeMb} MB file:\n`);
 
 await timed("Split (extract 1-50)", async () => {
-  await openTool("Split PDF");
+  await openTool("Organize Pages", "Split PDF");
   await page.locator("input[type=file]").setInputFiles(bigPdfPath);
   await page.waitForTimeout(400);
   await page.locator("input#pages").fill("1-50");
@@ -155,21 +160,21 @@ await timed("Split (extract 1-50)", async () => {
 });
 
 await timed("Merge (2x big file)", async () => {
-  await openTool("Merge PDF");
+  await openTool("Organize Pages", "Merge PDF");
   await page.locator("input[type=file]").setInputFiles([bigPdfPath, bigPdfPath]);
   await page.waitForTimeout(400);
   await clickAndDownload(/Merge/i);
 });
 
 await timed("Compress", async () => {
-  await openTool("Compress PDF");
+  await openTool("Edit & Enhance", "Compress PDF");
   await page.locator("input[type=file]").setInputFiles(bigPdfPath);
   await page.waitForTimeout(400);
   await clickAndDownload(/Compress PDF/i);
 });
 
 await timed("Add Watermark", async () => {
-  await openTool("Add Watermark");
+  await openTool("Edit & Enhance", "Add Watermark");
   await page.locator("input[type=file]").setInputFiles(bigPdfPath);
   await page.waitForTimeout(400);
   await page.locator("input#text").fill("CONFIDENTIAL");
@@ -177,14 +182,14 @@ await timed("Add Watermark", async () => {
 });
 
 await timed("Add Page Numbers", async () => {
-  await openTool("Add Page Numbers");
+  await openTool("Edit & Enhance", "Add Page Numbers");
   await page.locator("input[type=file]").setInputFiles(bigPdfPath);
   await page.waitForTimeout(400);
   await clickAndDownload(/Add Page Numbers/i);
 });
 
 await timed("Protect (AES-256)", async () => {
-  await openTool("Protect PDF");
+  await openTool("Security", "Protect PDF");
   await page.locator("input[type=file]").setInputFiles(bigPdfPath);
   await page.waitForTimeout(400);
   await page.locator("input#password").fill("bench-pass-123");
@@ -196,16 +201,27 @@ await timed("Protect (AES-256)", async () => {
 // and the F-20 finding) but only *displays* PREVIEW_LIMIT (12). This
 // measures the real, currently-wasted internal cost.
 await timed("PDF to Images — preview (renders every page, shows 12)", async () => {
-  await openTool("PDF to Images");
+  await openTool("Convert & Export", "PDF to Images");
   await page.locator("input[type=file]").setInputFiles(bigPdfPath);
   await page.waitForSelector("[data-testid=page-previews] img", { timeout: 180000 });
 });
 
 await timed("PDF to Images — full export as PNGs (zip)", async () => {
-  await openTool("PDF to Images");
+  await openTool("Convert & Export", "PDF to Images");
   await page.locator("input[type=file]").setInputFiles(bigPdfPath);
   await page.waitForSelector("[data-testid=page-previews] img", { timeout: 180000 });
   await clickAndDownload(/Export Pages/i, 240000);
+});
+
+// F-21: Redact now scans every page's size (getPageSizes) as soon as a file
+// is selected, to know which pages are safe to copy a box onto. Measures
+// time from file-select to that scan completing (the page-count label
+// appearing), not a full redaction — mouse-drag drawing isn't part of the
+// reproducible suite (see docs/PERFORMANCE.md).
+await timed("Redact — page-size scan on file select", async () => {
+  await openTool("Security", "Redact PDF");
+  await page.locator("input[type=file]").setInputFiles(bigPdfPath);
+  await page.waitForSelector(`text=/Page 1 of ${PAGES}/`, { timeout: 180000 });
 });
 
 await browser.close();

@@ -29,6 +29,10 @@ isn't optional bookkeeping — it's what the release notes are made of.
 - **Convert to PDF**: select several JPEG/PNG images at once to combine them
   into one multi-page PDF, in the order shown, instead of converting each one
   separately and merging them afterward.
+- **Redact PDF**: apply the box(es) drawn on the current page to a range of
+  other pages (or every other page) in one step, instead of redrawing the
+  same box on each page by hand. Pages whose size doesn't match the page you
+  drew on are skipped and named, rather than silently misplacing the box.
 - Large-file performance is now documented and benchmarked
   ([`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)) — real measured results on
   hundreds of pages and tens of MB, not estimates.

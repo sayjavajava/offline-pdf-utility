@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { redactPdf, type RedactionRect } from '@/lib/pdf-utils';
-import { renderPdfPages, getPageCount } from '@/lib/pdf-render';
+import { redactPdf, parsePageRange, type RedactionRect } from '@/lib/pdf-utils';
+import { renderPdfPages, getPageSizes, type PageSize } from '@/lib/pdf-render';
 import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { assertPdfFile, largeFileWarning } from '@/lib/file-validation';
 import { FilePicker } from '@/components/FilePicker';
@@ -19,23 +19,25 @@ type PixelPoint = { x: number; y: number };
 export const RedactTool = () => {
   const [files, setFiles] = useState<File[]>([]);
   const [password, setPassword] = useState('');
-  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [pageSizes, setPageSizes] = useState<PageSize[] | null>(null);
   const [pageIndex, setPageIndex] = useState(0); // 0-based
   const [preview, setPreview] = useState<{ url: string; heightPts: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [redactions, setRedactions] = useState<Record<number, RedactionRect[]>>({});
   const [drag, setDrag] = useState<{ start: PixelPoint; current: PixelPoint } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [applyRange, setApplyRange] = useState('');
   const imgRef = useRef<HTMLImageElement>(null);
   const { toast } = useToast();
   const file = files[0] ?? null;
   const pageNumber = pageIndex + 1;
+  const pageCount = pageSizes?.length ?? null;
 
   // Render the current page whenever the file, page, or password changes.
   useEffect(() => {
     if (!file) {
       setPreview(null);
-      setPageCount(null);
+      setPageSizes(null);
       return;
     }
     let cancelled = false;
@@ -66,18 +68,22 @@ export const RedactTool = () => {
     };
   }, [file, pageIndex, password]);
 
-  // Page count, once we can actually open the file (needs the right password).
+  // Page sizes, once we can actually open the file (needs the right
+  // password). Doubles as the page count (F-21) — `getPageSizes` already
+  // opens the document and visits every page's `/MediaBox` without
+  // rendering anything, so deriving the count from it avoids a second,
+  // redundant document open just to ask `numPages`.
   useEffect(() => {
     if (!file) return;
     let cancelled = false;
     (async () => {
       try {
-        const count = await getPageCount(file, password);
-        if (!cancelled) setPageCount(count);
+        const sizes = await getPageSizes(file, password);
+        if (!cancelled) setPageSizes(sizes);
       } catch {
         // Handled by the preview effect's own error path (wrong/missing
-        // password); page count just stays unknown until that resolves.
-        if (!cancelled) setPageCount(null);
+        // password); sizes just stay unknown until that resolves.
+        if (!cancelled) setPageSizes(null);
       }
     })();
     return () => {
@@ -143,6 +149,94 @@ export const RedactTool = () => {
   const pagesWithBoxes = Object.values(redactions).filter((rects) => rects.length > 0).length;
   const currentPageBoxes = redactions[pageNumber] ?? [];
 
+  /**
+   * Copies the current page's boxes onto other pages (F-21) — the actual gap
+   * a company rollout hits: redacting something that recurs on every page
+   * (a footer, a case number) otherwise means manually repeating the same
+   * drag hundreds of times. A box is defined in PDF-point space relative to
+   * its own page, so blindly copying it onto a differently-sized page would
+   * silently land it somewhere wrong — the same "looks like it worked, does
+   * nothing right" shape this app avoids elsewhere (P0-5, P1-17). Pages
+   * whose size doesn't match the source page are skipped and named, not
+   * silently mismatched.
+   */
+  const handleApplyToRange = () => {
+    if (currentPageBoxes.length === 0 || !pageCount || !pageSizes) return;
+
+    const trimmed = applyRange.trim();
+    const targets: number[] = [];
+    if (trimmed === '' || trimmed.toLowerCase() === 'all') {
+      for (let p = 1; p <= pageCount; p++) if (p !== pageNumber) targets.push(p);
+    } else {
+      const parsed = parsePageRange(trimmed, pageCount);
+      if (parsed.errors.length > 0) {
+        toast({ title: 'Invalid page range', description: parsed.errors.join(' '), variant: 'destructive' });
+        return;
+      }
+      for (const index of new Set(parsed.indices)) {
+        const p = index + 1;
+        if (p !== pageNumber) targets.push(p);
+      }
+    }
+
+    if (targets.length === 0) {
+      toast({
+        title: 'No other pages to apply to',
+        description: 'That range only covers the page you already drew on.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const sourceSize = pageSizes[pageIndex];
+    const SIZE_TOLERANCE_PT = 1; // absorbs float noise, not a real size difference
+    const applied: number[] = [];
+    const skipped: number[] = [];
+    for (const p of targets) {
+      const targetSize = pageSizes[p - 1];
+      const sameSize =
+        Math.abs(targetSize.width - sourceSize.width) <= SIZE_TOLERANCE_PT &&
+        Math.abs(targetSize.height - sourceSize.height) <= SIZE_TOLERANCE_PT;
+      if (sameSize) applied.push(p);
+      else skipped.push(p);
+    }
+
+    if (applied.length > 0) {
+      setRedactions((prev) => {
+        const next = { ...prev };
+        for (const p of applied) {
+          next[p] = [...(next[p] ?? []), ...currentPageBoxes];
+        }
+        return next;
+      });
+    }
+
+    const MAX_LISTED = 8;
+    const listSkipped = () => {
+      const shown = skipped.slice(0, MAX_LISTED).join(', ');
+      const remaining = skipped.length - MAX_LISTED;
+      return `${shown}${remaining > 0 ? ` and ${remaining} more` : ''}`;
+    };
+
+    if (applied.length > 0 && skipped.length === 0) {
+      toast({
+        title: 'Applied',
+        description: `Copied ${currentPageBoxes.length} box${currentPageBoxes.length === 1 ? '' : 'es'} to ${applied.length} page${applied.length === 1 ? '' : 's'}.`,
+      });
+    } else if (applied.length > 0 && skipped.length > 0) {
+      toast({
+        title: 'Applied, with some pages skipped',
+        description: `Copied to ${applied.length} page${applied.length === 1 ? '' : 's'}. Skipped ${skipped.length} page${skipped.length === 1 ? '' : 's'} with a different page size than page ${pageNumber}: ${listSkipped()}.`,
+      });
+    } else {
+      toast({
+        title: 'No pages match this page\'s size',
+        description: `Every page in range has a different size than page ${pageNumber}, so nothing was copied: ${listSkipped()}.`,
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleApply = async () => {
     if (!file) {
       toast({ title: 'No file selected', description: 'Please select a PDF file.', variant: 'destructive' });
@@ -179,6 +273,7 @@ export const RedactTool = () => {
           setFiles(next);
           setRedactions({});
           setPageIndex(0);
+          setApplyRange('');
           if (next[0]) {
             const warning = largeFileWarning(next[0]);
             if (warning) toast({ title: 'Large file', description: warning });
@@ -289,6 +384,26 @@ export const RedactTool = () => {
                 </li>
               ))}
             </ul>
+          )}
+
+          {currentPageBoxes.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <div>
+                <Label htmlFor="apply-range">
+                  Apply this page's box{currentPageBoxes.length === 1 ? '' : 'es'} to other pages
+                </Label>
+                <Input
+                  id="apply-range"
+                  value={applyRange}
+                  onChange={(e) => setApplyRange(e.target.value)}
+                  placeholder="e.g. 2-50 — or leave blank for every other page"
+                  className="w-72"
+                />
+              </div>
+              <Button type="button" variant="outline" onClick={handleApplyToRange} disabled={!pageSizes}>
+                Apply
+              </Button>
+            </div>
           )}
         </div>
       )}

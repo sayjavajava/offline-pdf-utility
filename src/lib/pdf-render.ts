@@ -222,3 +222,27 @@ export async function getPageCount(file: File, password?: string): Promise<numbe
   await doc.cleanup();
   return count;
 }
+
+export type PageSize = { width: number; height: number };
+
+/**
+ * Every page's size in PDF points (F-21), without rendering anything —
+ * `getViewport` only reads the page's `/MediaBox`, no canvas or content-stream
+ * decoding involved, so this is far cheaper than `renderPdfPages` despite
+ * touching every page. Lets a caller check whether a box drawn on one page
+ * would land somewhere sane on another before copying it there — a document
+ * mixing portrait and landscape pages, or A4 and Letter, is common enough
+ * that this can't be assumed away.
+ */
+export async function getPageSizes(file: File, password?: string): Promise<PageSize[]> {
+  const doc = await loadDocument(file, password);
+  const sizes: PageSize[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale: 1 });
+    sizes.push({ width: viewport.width, height: viewport.height });
+    page.cleanup();
+  }
+  await doc.cleanup();
+  return sizes;
+}
