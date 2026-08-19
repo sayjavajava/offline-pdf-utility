@@ -16,6 +16,7 @@ import {
   FileArchive,
   Crop,
   Eraser,
+  GitCompare,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import { ExtractTextTool } from './tools/ExtractTextTool';
 import { CompressTool } from './tools/CompressTool';
 import { CropResizeTool } from './tools/CropResizeTool';
 import { RedactTool } from './tools/RedactTool';
+import { CompareTool } from './tools/CompareTool';
 
 /**
  * Grouping the 16 tools by category (F-23) — reduces the dashboard to a
@@ -130,6 +132,13 @@ const pdfTools: { id: string; title: string; description: string; icon: typeof S
     category: "Convert & Export",
   },
   {
+    id: "compare",
+    title: "Compare PDFs",
+    description: "Find what changed between two versions — page by page, text and visual.",
+    icon: GitCompare,
+    category: "Convert & Export",
+  },
+  {
     id: "edit",
     title: "Edit Metadata",
     description: "Modify your PDF's title, author, subject, and keywords.",
@@ -214,6 +223,7 @@ export const GlassDashboard = () => {
             {activeTool === 'extractimages' && <ExtractImagesTool />}
             {activeTool === 'pdftoimages' && <PdfToImagesTool />}
             {activeTool === 'extracttext' && <ExtractTextTool />}
+            {activeTool === 'compare' && <CompareTool />}
             {activeTool === 'compress' && <CompressTool />}
             {activeTool === 'cropresize' && <CropResizeTool />}
             {activeTool === 'redact' && <RedactTool />}

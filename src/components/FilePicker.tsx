@@ -2,7 +2,7 @@
  * Shared file picker with drag-and-drop and (for multi) reorder/remove (F-8).
  * Validates through the caller's `onValidate` so PDF tools keep P1-11 checks.
  */
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,11 @@ export function FilePicker({
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  // Every instance needs its own id — two FilePickers on one screen (e.g.
+  // Compare PDFs' "PDF A"/"PDF B") would otherwise both wire their <Label>
+  // to the first "file-picker" element in the DOM, making the second
+  // picker's label unclickable.
+  const inputId = useId();
 
   const ingest = async (list: FileList | File[]) => {
     const incoming = Array.from(list);
@@ -85,7 +90,7 @@ export function FilePicker({
 
   return (
     <div>
-      <Label htmlFor="file-picker">{label}</Label>
+      <Label htmlFor={inputId}>{label}</Label>
       <div
         className={cn(
           "mt-1 rounded-md border border-dashed border-input p-4 transition-colors",
@@ -103,7 +108,7 @@ export function FilePicker({
           Drag and drop here, or choose files.
         </p>
         <Input
-          id="file-picker"
+          id={inputId}
           ref={inputRef}
           type="file"
           accept={accept}

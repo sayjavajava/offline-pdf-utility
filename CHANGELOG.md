@@ -36,6 +36,11 @@ isn't optional bookkeeping — it's what the release notes are made of.
 - Large-file performance is now documented and benchmarked
   ([`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)) — real measured results on
   hundreds of pages and tens of MB, not estimates.
+- **Compare PDFs**: find what changed between two versions of a document,
+  page by page — both whether the extracted text differs and whether the
+  page renders differently, reported independently since either can change
+  without the other. Read-only; produces a downloadable text report, not a
+  new PDF.
 
 ## [0.2.0] - 2026-08-19
 

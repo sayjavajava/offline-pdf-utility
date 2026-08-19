@@ -13,6 +13,7 @@
 import * as ops from './pdf-ops';
 import { convertDocxToPdf as convertDocxToPdfImpl } from './docx-convert';
 import { redactPdf as redactPdfImpl } from './pdf-redact';
+import { comparePdfs as comparePdfsImpl } from './pdf-compare';
 import { runInWorker, workerAvailable } from './run-in-worker';
 
 export type {
@@ -28,6 +29,7 @@ export type {
 } from './pdf-ops';
 export type { ExtractedImage, ExtractImagesResult } from './image-extract';
 export type { RedactionRect } from './pdf-redact';
+export type { PageComparison, CompareResult } from './pdf-compare';
 
 // Pure and cheap — no reason to pay a round trip.
 export const parsePageRange = ops.parsePageRange;
@@ -96,3 +98,10 @@ export const convertDocxToPdf = convertDocxToPdfImpl;
  * constraint pdf-render.ts documents for F-4/F-5.
  */
 export const redactPdf = redactPdfImpl;
+
+/**
+ * Comparison also stays on the main thread (F-19): it renders both files via
+ * pdf.js and decodes the result back to pixels for a visual diff, both of
+ * which need a canvas — same constraint as redactPdf above.
+ */
+export const comparePdfs = comparePdfsImpl;

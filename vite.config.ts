@@ -80,6 +80,7 @@ export default defineConfig(({ mode }) => ({
         "src/lib/pdf.worker.ts", // worker entry: no Worker in jsdom
         "src/lib/qpdf-engine.ts", // qpdf-wasm: Node's fetch cannot load a data: URI the way a browser does
         "src/lib/pdf-redact.ts", // rasterizes via pdf.js + createImageBitmap/canvas — same as pdf-render.ts; its pure coordinate math (toPixelRect) and validation paths are still covered by pdf-redact.test.ts, just not counted here since the file as a whole can't run under jsdom
+        "src/lib/pdf-compare.ts", // decodes rendered pages via createImageBitmap/canvas for the pixel diff — same constraint; its orchestration logic (page alignment, text/visual thresholds) is still covered by pdf-compare.test.ts against a mocked pdf-render.ts, just not counted here
       ],
       // A ratchet, not an aspiration: these sit just below what the suite
       // currently achieves, so a regression fails the build. Raise them as
