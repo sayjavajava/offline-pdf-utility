@@ -1,5 +1,10 @@
 # Offline PDF Utility
 
+[![Latest release](https://img.shields.io/github/v/release/sayjavajava/offline-pdf-utility?label=release)](https://github.com/sayjavajava/offline-pdf-utility/releases/latest)
+[![Total downloads](https://img.shields.io/github/downloads/sayjavajava/offline-pdf-utility/total?label=downloads)](https://github.com/sayjavajava/offline-pdf-utility/releases)
+[![GitHub stars](https://img.shields.io/github/stars/sayjavajava/offline-pdf-utility?style=flat&label=stars)](https://github.com/sayjavajava/offline-pdf-utility/stargazers)
+[![License: GPL-3.0-or-later](https://img.shields.io/github/license/sayjavajava/offline-pdf-utility)](LICENSE)
+
 An **AI-coded**, completely offline PDF toolkit built with React and TypeScript, featuring a stunning glassmorphism UI. Perform all PDF operations securely in your browser with complete privacy.
 
 ## App Interface
