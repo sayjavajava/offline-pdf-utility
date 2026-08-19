@@ -5,7 +5,7 @@
 
 ---
 
-## Status — every originally-scoped finding is implemented. Open backlog items: **F-16, F-17** — written up for later implementation, not started. Closed (won't build): **F-11**.
+## Status — every originally-scoped finding is implemented. Open backlog items: **F-16** — needs a fresh idea; two attempts have been dropped, see below. Closed (won't build): **F-11**.
 
 | Phase | Findings | State |
 |---|---|---|
@@ -26,7 +26,7 @@
 | 8 | F-13 | ✅ done — `dd92468` |
 | 9 | F-14 | ✅ done — `32f5177` |
 | 9 | F-15 | ✅ done — `9f7e38c` |
-| 9 | **F-17** | ⬜ **open — written up, not started. See below.** |
+| 9 | F-17 | ✅ done — `9644ed4` |
 | 9 | **F-16** | ⬜ **open — spike done, negative on both Repair and a Diagnose fallback; see below for what's still on the table.** |
 | — | P1-17 | ✅ done — `b4ace14` (discovered verifying F-1's round trip, predates it) |
 
@@ -262,7 +262,7 @@ Counts are as originally audited, with what remains open after Phases 1–8 (par
 | **P1** | 12 | **0** | Wrong behaviour, misleading errors, silent failures. P1-17 found and fixed post-release, during F-1. |
 | **P2** | 9 | **1** (P2-24) | Code health, type safety, a11y, infra. |
 | **T** | 11 | **0** | Test specs — all written. |
-| **F** | 17 | **2** (F-16, F-17) | Additive features. F-1–F-10, F-12–F-15 done; F-11 closed as incompatible; F-16, F-17 written up/spiked, not shipped. |
+| **F** | 17 | **1** (F-16) | Additive features. F-1–F-10, F-12–F-15, F-17 done; F-11 closed as incompatible; F-16 spiked twice, nothing shipped. |
 
 ### The three that mattered most — all now fixed
 
@@ -1363,48 +1363,42 @@ Unit tests separately pin the reference-point claim directly: a marker's `Tm` co
 unchanged post-resize (confirming the `cm`-wrapper mechanism, not a coordinate rewrite), and
 `Tm * scaleFactor` lands exactly on the new box's own coordinates.
 
-**F-16 · Repair a damaged PDF — open, needs a real spike first; initial evidence is discouraging.**
-The obvious assumption — qpdf is purpose-built for this, wire it up — **did not survive testing**,
-and this section exists specifically so that assumption doesn't get re-made without re-checking it.
+**F-16 · Repair a damaged PDF — open; two attempts dropped, needs a fresh idea.** The obvious
+assumption — qpdf is purpose-built for this, wire it up — **did not survive testing**, and this
+section exists specifically so that assumption doesn't get re-made without re-checking it.
 
-**What was actually tested:** four corrupted variants of the same source PDF, built and checked
-directly (not from documentation) against both this app's current `loadPdf` (`@cantoo/pdf-lib`) and
-qpdf's default recovery (`qpdf in.pdf out.pdf`; qpdf's error recovery is on by default —
-`--suppress-recovery` is what turns it *off*):
+**What was actually tested:** corrupted variants of a source PDF, built and checked directly (not
+from documentation) against both this app's current `loadPdf` (`@cantoo/pdf-lib`) and qpdf's
+recovery (`qpdf in.pdf out.pdf`; qpdf's error recovery is on by default — `--suppress-recovery` is
+what turns it *off*). Extended to a full matrix: 2 base xref shapes (classic table, compressed
+stream) × 3 corruption types (missing `startxref`, `startxref` past EOF, corrupted stream
+`/Length`) × 3 qpdf strategies (default, `--ignore-xref-streams`, `--qdf`) = 18 attempts.
 
-| Corruption | `loadPdf` today | qpdf default recovery |
-|---|---|---|
-| `startxref` missing entirely (severe truncation) | fails | **also fails** — `can't find startxref` |
-| `startxref` present, points past EOF; compressed xref **stream** | **recovers on its own** | **fails** — `expected n n obj` |
-| Same corruption, classic xref **table** | **recovers on its own** | not re-tested against qpdf in this spike |
-| Corrupted `/Length` on a content stream | **recovers on its own** | not re-tested against qpdf in this spike |
+**qpdf recovered zero of them.** `loadPdf` (`@cantoo/pdf-lib`, unmodified — no new code) opened and
+read pages back from all 6 corrupted files. `qpdf --help=all` was searched for every flag mentioning
+recovery, reconstruction, or repair — the only one that exists is `--suppress-recovery`, which
+*disables* recovery; there is no alternate or stronger mode to opt into. A real-world search (per
+this finding's own bar: synthetic corruption alone isn't enough) turned up
+[Hopding/pdf-lib#454](https://github.com/Hopding/pdf-lib/issues/454), a genuine bug report — but a
+different failure shape than what this needs: pdf-lib *loads* the file fine and only produces a bad
+*resave* after merging, rather than failing to load it at all. No real "loadPdf fails, qpdf succeeds"
+case turned up, synthetic or real. **"Repair a damaged PDF" is dropped** — qpdf's recovery has never
+once done anything this app's own loader doesn't already do for free.
 
-The one directly-comparable case found **qpdf's repair worse than what this app's `loadPdf` already
-tolerates today, for free, with no new code** — the opposite of the assumption this finding started
-from. `@cantoo/pdf-lib` turns out to already have real fallback recovery for bad xref offsets; qpdf's
-default recovery, at least for the xref-stream shape, does not reach as far.
+**Second attempt, also dropped:** the fallback scoped here — a read-only **Diagnose** tool wrapping
+qpdf's `--check` (report a file's structural health without promising a fix) — was fully built,
+tested (unit tests running the real qpdf WASM module, plus real-browser Playwright verification) and
+shipped in a PR. It was **cut on product grounds, not a technical failure**: told a user *why* their
+PDF wouldn't open, but did nothing to actually help them beyond that, and every corruption this app's
+own tools will ever plausibly see already opens fine without any tool at all — the value was judged
+too thin to keep. The build-and-test work is discarded along with it (see the closed PR
+[#16](https://github.com/sayjavajava/offline-pdf-utility/pull/16) for what it looked like, if this
+gets revisited).
 
-**What a real spike needs before this is scoped as a feature:** damaged files sourced from something
-real — bug reports against other PDF tools, or files with genuine corruption from an interrupted
-download or disk fault, not more synthetic ones like the table above — to find an actual case where
-`loadPdf` fails **and** qpdf (default recovery, or another mode not yet tried, such as forcing a full
-linear object scan) succeeds. Until a case like that is found and confirmed, do not implement this as
-"route damaged files through qpdf" on the strength of qpdf's own documentation alone.
+**Still open:** F-16 needs a genuinely different idea, not a third attempt at repair/diagnose framing
+— open to product direction on what that should be.
 
-**Fallback scope if the spike comes up empty:** a much smaller, safer **Diagnose** tool instead of
-"Repair" — run `--check` (read-only; qpdf's own words: *"does not perform any validation of the
-actual PDF page content or semantic correctness... merely checks that the PDF file is syntactically
-valid"*; exit 0 clean / 2 errors / 3 warnings-only) and show the user qpdf's structural report.
-`@cantoo/pdf-lib` has no equivalent diagnostic output of its own — it only throws or succeeds. This
-has real, honest value (tell a user *why* their PDF won't open) without promising a fix that may not
-exist.
-
-**Accept:** either (a) qpdf genuinely repairs a real damaged file `loadPdf` cannot open today,
-verified by successfully reading content back out of the repaired file afterward — not just a clean
-exit code — or (b) if the spike finds no such case, ship `--check` alone as a read-only diagnostic
-and record here why "repair" was dropped in favor of "diagnose."
-
-**F-17 · Permissions on Protect PDF — open, scoped below.** `qpdf --help=encryption` (verified, not
+**F-17 · Permissions on Protect PDF — ✅ DONE (`9644ed4`).** `qpdf --help=encryption` (verified, not
 assumed) supports real restriction flags at the 256-bit strength **F-1** already uses:
 `--print=[none|low|full]`, `--modify=[none|assembly|form|annotate|all]`, `--extract=[y|n]`
 (copy/extract text and graphics), `--annotate=[y|n]` (commenting/filling forms), `--assemble=[y|n]`,
@@ -1457,6 +1451,47 @@ needed) — plus the two required password fields. Don't expose all eight qpdf f
 qpdf's own `--show-encryption`, "print low resolution: not allowed" and "print high resolution: not
 allowed" when read back; it opens with just the open password (or no password, if left empty); and
 the permissions password — not the open password — is what's required to see unrestricted access.
+
+**What shipped and how it was verified.** `encryptPdfBytesWithPermissions` in `qpdf-engine.ts`
+(`--print`, `--modify`, `--extract` flags alongside `--encrypt <open> <permissions> 256`),
+`protectPdfWithPermissions` in `pdf-ops.ts`, wired through the worker like every other operation.
+`ProtectTool`'s existing single-password flow is untouched by default; a "Restrict printing,
+copying, or editing" checkbox reveals the permissions password field and the three v1 controls
+(print none/low/full, edit none/all, copy allowed/not) only when turned on — so the common "just
+add a password" case never sees the two-password model, and the model only appears once
+restrictions are actually being requested. The permissions password is rejected outright if it
+equals the open password, before any qpdf call — the exact silent-no-op shape this finding opened
+with (P0-5, P1-17's pattern repeating).
+
+**A correction to this section's own "Verification gap" note above:** it assumed
+`qpdf-engine.ts`'s success path was untestable under Vitest because "Node's fetch does not resolve
+a `data:` URI the way a browser does" (true when F-1 was written and verified). That assumption was
+checked again while writing this feature's tests, not carried forward — and on the Node 22.22.2
+this repo now requires (bumped for `jsdom@30`, see the F-1 section above), `fetch("data:...")`
+resolves correctly and the *entire* qpdf WASM module loads and runs under Vitest. Confirmed directly:
+`protectPdfWithPermissions` now has real unit tests (`pdf-utils.test.ts`) that run the actual qpdf
+WASM encryption and prove a wrong password is rejected while both the open and permissions passwords
+succeed — not just the pre-WASM validation, which is all that was previously testable this way. The
+`qpdf-engine.ts` coverage exclusion in `vite.config.ts` is left in place here (it still covers
+`encryptPdfBytes` and other qpdf-backed code this change doesn't touch, and revisiting a repo-wide
+coverage gate is out of scope) — but the premise behind it no longer holds unconditionally and is
+worth re-checking before the next qpdf-dependent feature assumes it.
+
+Verified against the real built app (Playwright, `file://`, all non-local requests blocked, 0
+network requests), using qpdf's own `--show-encryption` as the oracle (run a second time, directly
+under Node — confirmed working per the correction above — rather than only in-browser, since
+`@cantoo/pdf-lib` cannot read permission flags back): (1) protecting a file with printing/editing/
+copying all disabled and a distinct permissions password produced a file where `--show-encryption`
+reports every requested restriction as "not allowed", and correctly identifies the empty open
+password as "Supplied password is user password" and the permissions password as "Supplied password
+is owner password" — both valid, distinct credentials, exactly as required (note: `--show-encryption`
+reports the *declared* restriction bits from the encryption dictionary regardless of which valid
+password opened the file — confirmed via `qpdf --help=--show-encryption` — so it is not itself the
+tool that proves a reader *enforces* the bits differently for user vs. owner access; that enforcement
+is reader-side behavior specified by the PDF format itself, which is what the two-distinct-passwords
+requirement exists to make meaningful); (2) the UI rejects a permissions password equal to the open
+password before ever reaching qpdf; (3) leaving the restrictions checkbox off still produces the
+original F-1 behavior — full permissions, single shared password — with no regression.
 
 ---
 

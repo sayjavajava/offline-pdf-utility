@@ -12,6 +12,7 @@ import {
   editPdfMetadata,
   mergePdf,
   protectPdf,
+  protectPdfWithPermissions,
   removePdfPassword,
   splitPdf,
 } from "./pdf-utils";
@@ -123,6 +124,77 @@ describe("protectPdf validation (F-1)", () => {
   it("rejects a password shorter than 4 characters", async () => {
     await expect(protectPdf(await makePdfFile(2), "abc")).rejects.toThrow(/at least 4 characters/i);
   });
+});
+
+describe("protectPdfWithPermissions (F-17)", () => {
+  // Validation that runs before the qpdf WASM call. It matters most here
+  // because it is the one guarding against a genuinely silent failure mode —
+  // a permissions password equal to the open password would produce a file
+  // that *looks* restricted but enforces nothing, since PDF readers grant
+  // full access to whoever supplies the owner (permissions) password.
+  const permissions = { print: "none", extract: false, modify: "none" } as const;
+
+  it("rejects an empty permissions password", async () => {
+    await expect(
+      protectPdfWithPermissions(await makePdfFile(1), "", "", permissions),
+    ).rejects.toThrow(/enter a permissions password/i);
+  });
+
+  it("rejects a permissions password shorter than 4 characters", async () => {
+    await expect(
+      protectPdfWithPermissions(await makePdfFile(1), "", "abc", permissions),
+    ).rejects.toThrow(/at least 4 characters/i);
+  });
+
+  it("rejects a permissions password equal to the open password", async () => {
+    await expect(
+      protectPdfWithPermissions(await makePdfFile(1), "shared-secret", "shared-secret", permissions),
+    ).rejects.toThrow(/must differ from the open password/i);
+  });
+
+  // The rest of this suite reaches the real qpdf WASM module, not just
+  // validation — corrected finding, not present when F-1 was written: the
+  // exclusion of qpdf-engine.ts from unit coverage (vite.config.ts) and its
+  // own docstring both assumed "Node's fetch does not resolve a data: URI
+  // the way a browser does." That was checked against an older Node; on the
+  // Node 22.22.2 this repo now requires (bumped for jsdom@30, see the F-1
+  // section of docs/CODE_AUDIT.md), `fetch("data:...")` resolves correctly
+  // and the whole WASM module loads and runs under Vitest — confirmed here,
+  // not assumed. The exclusion itself is left in place (it also covers
+  // encryptPdfBytes and compressPdf's shared plumbing, and revisiting a
+  // repo-wide coverage gate is out of scope for this change), but F-17's own
+  // new code no longer needs Playwright alone to prove it actually works.
+  it("produces a file that opens with the open password but rejects a wrong one", async () => {
+    const blob = await protectPdfWithPermissions(await makePdfFile(1), "", "owner-secret", permissions);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    // If this were not genuinely encrypted, any password (or none) would open
+    // it — a wrong password succeeding would mean protectPdfWithPermissions
+    // silently produced an unprotected file while claiming success.
+    await expect(PDFDocument.load(bytes, { password: "wrong-password" })).rejects.toThrow(
+      /password incorrect/i,
+    );
+
+    const openedWithUserPassword = await PDFDocument.load(bytes, { password: "" });
+    expect(openedWithUserPassword.getPageCount()).toBe(1);
+
+    // The permissions (owner) password must also open it — it is a valid
+    // decryption credential, just one that additionally bypasses restrictions.
+    const openedWithOwnerPassword = await PDFDocument.load(bytes, { password: "owner-secret" });
+    expect(openedWithOwnerPassword.getPageCount()).toBe(1);
+  }, 20000); // First real WASM compile in the run is slow, more so under coverage instrumentation.
+
+  it("allows a non-empty open password distinct from the permissions password", async () => {
+    const blob = await protectPdfWithPermissions(
+      await makePdfFile(1),
+      "open-secret",
+      "owner-secret",
+      permissions,
+    );
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const opened = await PDFDocument.load(bytes, { password: "open-secret" });
+    expect(opened.getPageCount()).toBe(1);
+  }, 20000);
 });
 
 describe("password threading through the other tools", () => {
