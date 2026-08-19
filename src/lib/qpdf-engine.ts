@@ -32,8 +32,7 @@
  * encryption, reporting success while handing back a file that was still
  * password protected. That was a bug in `loadPdf`'s handling of that xref
  * shape generally (not specific to this tool's output), fixed at the source
- * in `stripStaleXRefStreamObjects` (pdf-ops.ts) — see **P1-17** in
- * docs/CODE_AUDIT.md for the full root cause. No qpdf-side workaround is
+ * in `stripStaleXRefStreamObjects` (pdf-ops.ts). No qpdf-side workaround is
  * needed here as a result; qpdf runs with its own defaults.
  */
 import createQpdfModule from '@jspawn/qpdf-wasm/qpdf.js';
@@ -161,7 +160,7 @@ export type PdfPermissions = {
   /**
    * Allow document modification. qpdf's own scale has five levels
    * (none/assembly/form/annotate/all); this UI collapses that to a binary for
-   * v1 — see F-17 in docs/CODE_AUDIT.md.
+   * v1.
    */
   modify: 'none' | 'all';
 };
@@ -170,13 +169,12 @@ export type PdfPermissions = {
  * Encrypts `inputBytes` with AES-256, distinct open (user) and permissions
  * (owner) passwords, and restriction flags (F-17).
  *
- * `qpdf --help=encryption` (verified, not assumed — see docs/CODE_AUDIT.md)
- * documents that restrictions are enforced only for whoever opens the
- * document with the *open* password: anyone who supplies the *permissions*
- * password gets full, unrestricted access regardless of these flags. Passing
- * the same string for both would silently produce a file that looks
- * protected but enforces nothing — the exact "looks like success, does
- * nothing" shape this audit has flagged elsewhere (P0-5, P1-17) — so that
+ * `qpdf --help=encryption` (verified, not assumed) documents that
+ * restrictions are enforced only for whoever opens the document with the
+ * *open* password: anyone who supplies the *permissions* password gets full,
+ * unrestricted access regardless of these flags. Passing the same string for
+ * both would silently produce a file that looks protected but enforces
+ * nothing — a "looks like success, does nothing" failure mode — so that
  * case is rejected here rather than left to produce a working-looking no-op.
  */
 export async function encryptPdfBytesWithPermissions(

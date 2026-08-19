@@ -114,8 +114,8 @@ describe("protectPdf validation (F-1)", () => {
   // loaded via a `data:` URI that only a real browser's `fetch` resolves the
   // way this relies on — Node's does not, so that path is excluded from
   // coverage and verified against the real file:// build instead (see
-  // vite.config.ts and the F-1 section of docs/CODE_AUDIT.md). What's tested
-  // here is validation that runs before any of that: it must reject a bad
+  // vite.config.ts). What's tested here is validation that runs before any
+  // of that: it must reject a bad
   // password without ever reaching the WASM module.
   it("rejects an empty password", async () => {
     await expect(protectPdf(await makePdfFile(2), "")).rejects.toThrow(/enter a password/i);
@@ -157,8 +157,8 @@ describe("protectPdfWithPermissions (F-17)", () => {
   // exclusion of qpdf-engine.ts from unit coverage (vite.config.ts) and its
   // own docstring both assumed "Node's fetch does not resolve a data: URI
   // the way a browser does." That was checked against an older Node; on the
-  // Node 22.22.2 this repo now requires (bumped for jsdom@30, see the F-1
-  // section of docs/CODE_AUDIT.md), `fetch("data:...")` resolves correctly
+  // Node 22.22.2 this repo now requires (bumped for jsdom@30),
+  // `fetch("data:...")` resolves correctly
   // and the whole WASM module loads and runs under Vitest — confirmed here,
   // not assumed. The exclusion itself is left in place (it also covers
   // encryptPdfBytes and compressPdf's shared plumbing, and revisiting a

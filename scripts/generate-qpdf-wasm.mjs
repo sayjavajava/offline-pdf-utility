@@ -9,8 +9,7 @@
  * `data:` URI locally rather than over the network — so pointing `locateFile`
  * at a base64 data URI built from this file loads and runs the module with
  * zero network requests. Verified against the real file:// build with every
- * non-local request blocked before this was relied on (see F-1 in
- * docs/CODE_AUDIT.md).
+ * non-local request blocked before this was relied on.
  *
  * The output is generated rather than committed so it always matches the
  * installed @jspawn/qpdf-wasm. A committed copy would silently go stale on
