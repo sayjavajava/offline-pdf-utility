@@ -36,110 +36,136 @@ import { CompressTool } from './tools/CompressTool';
 import { CropResizeTool } from './tools/CropResizeTool';
 import { RedactTool } from './tools/RedactTool';
 
-const pdfTools = [
+/**
+ * Grouping the 16 tools by category (F-23) — reduces the dashboard to a
+ * handful of cards per screen instead of one long scroll, without changing
+ * any card's own look. Order here is also tab order.
+ */
+const CATEGORIES = ["Organize Pages", "Security", "Convert & Export", "Edit & Enhance"] as const;
+type Category = (typeof CATEGORIES)[number];
+
+const pdfTools: { id: string; title: string; description: string; icon: typeof Scissors; category: Category }[] = [
   {
     id: "split",
     title: "Split PDF",
     description: "Extract pages or divide documents with surgical precision.",
     icon: Scissors,
+    category: "Organize Pages",
   },
   {
     id: "merge",
     title: "Merge PDF",
     description: "Combine multiple PDF documents into a single file.",
     icon: Copy,
-  },
-  {
-    id: "edit",
-    title: "Edit Metadata",
-    description: "Modify your PDF's title, author, subject, and keywords.",
-    icon: Edit3,
-  },
-  {
-    id: "convert",
-    title: "Convert to PDF",
-    description: "Convert JPG, PNG, or DOCX files to PDF format.",
-    icon: RefreshCw,
-  },
-  {
-    id: "unlock",
-    title: "Unlock PDF",
-    description: "Remove password protection from encrypted PDF files.",
-    icon: Shield,
-  },
-  {
-    id: "protect",
-    title: "Protect PDF",
-    description: "Add a password so only someone who knows it can open the file.",
-    icon: Lock,
-  },
-  {
-    id: "watermark",
-    title: "Add Watermark",
-    description: "Apply a text watermark to every page of your PDF.",
-    icon: Sparkles,
+    category: "Organize Pages",
   },
   {
     id: "rotate",
     title: "Rotate Pages",
     description: "Rotate selected pages by 90°, 180°, or 270°.",
     icon: RotateCw,
+    category: "Organize Pages",
   },
   {
     id: "rearrange",
     title: "Delete / Reorder",
     description: "Keep pages in a custom order; omit pages to delete them.",
     icon: ListOrdered,
-  },
-  {
-    id: "pagenumbers",
-    title: "Add Page Numbers",
-    description: "Stamp sequential or Bates numbers onto every page.",
-    icon: Hash,
-  },
-  {
-    id: "extractimages",
-    title: "Extract Images",
-    description: "Pull the embedded images out of a PDF, without changing it.",
-    icon: Images,
-  },
-  {
-    id: "pdftoimages",
-    title: "PDF to Images",
-    description: "Render pages to PNG, with a thumbnail preview.",
-    icon: FileImage,
-  },
-  {
-    id: "extracttext",
-    title: "Extract Text",
-    description: "Pull the text out of a PDF as a plain text file.",
-    icon: FileType,
-  },
-  {
-    id: "compress",
-    title: "Compress PDF",
-    description: "Shrink a PDF, mainly by recompressing its embedded images.",
-    icon: FileArchive,
+    category: "Organize Pages",
   },
   {
     id: "cropresize",
     title: "Crop / Resize Pages",
     description: "Trim margins non-destructively, or rescale pages to a target size.",
     icon: Crop,
+    category: "Organize Pages",
+  },
+  {
+    id: "protect",
+    title: "Protect PDF",
+    description: "Add a password so only someone who knows it can open the file.",
+    icon: Lock,
+    category: "Security",
+  },
+  {
+    id: "unlock",
+    title: "Unlock PDF",
+    description: "Remove password protection from encrypted PDF files.",
+    icon: Shield,
+    category: "Security",
   },
   {
     id: "redact",
     title: "Redact PDF",
     description: "Permanently remove content under boxes you draw — deleted, not just covered.",
     icon: Eraser,
+    category: "Security",
+  },
+  {
+    id: "convert",
+    title: "Convert to PDF",
+    description: "Convert JPG, PNG, or DOCX files to PDF format.",
+    icon: RefreshCw,
+    category: "Convert & Export",
+  },
+  {
+    id: "pdftoimages",
+    title: "PDF to Images",
+    description: "Render pages to PNG, with a thumbnail preview.",
+    icon: FileImage,
+    category: "Convert & Export",
+  },
+  {
+    id: "extractimages",
+    title: "Extract Images",
+    description: "Pull the embedded images out of a PDF, without changing it.",
+    icon: Images,
+    category: "Convert & Export",
+  },
+  {
+    id: "extracttext",
+    title: "Extract Text",
+    description: "Pull the text out of a PDF as a plain text file.",
+    icon: FileType,
+    category: "Convert & Export",
+  },
+  {
+    id: "edit",
+    title: "Edit Metadata",
+    description: "Modify your PDF's title, author, subject, and keywords.",
+    icon: Edit3,
+    category: "Edit & Enhance",
+  },
+  {
+    id: "watermark",
+    title: "Add Watermark",
+    description: "Apply a text watermark to every page of your PDF.",
+    icon: Sparkles,
+    category: "Edit & Enhance",
+  },
+  {
+    id: "pagenumbers",
+    title: "Add Page Numbers",
+    description: "Stamp sequential or Bates numbers onto every page.",
+    icon: Hash,
+    category: "Edit & Enhance",
+  },
+  {
+    id: "compress",
+    title: "Compress PDF",
+    description: "Shrink a PDF, mainly by recompressing its embedded images.",
+    icon: FileArchive,
+    category: "Edit & Enhance",
   },
 ];
 
 export const GlassDashboard = () => {
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<Category>(CATEGORIES[0]);
   const handleToolClick = (toolId: string) => {
     setActiveTool(toolId);
   };
+  const visibleTools = pdfTools.filter((tool) => tool.category === activeCategory);
 
   return (
     <div className="min-h-screen bg-gradient-bg relative overflow-hidden">
@@ -193,17 +219,42 @@ export const GlassDashboard = () => {
             {activeTool === 'redact' && <RedactTool />}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-16">
-            {pdfTools.map((tool, index) => (
-              <GlassPDFCard
-                key={tool.id}
-                title={tool.title}
-                description={tool.description}
-                icon={tool.icon}
-                onClick={() => handleToolClick(tool.id)}
-                delay={index * 100}
-              />
-            ))}
+          <div className="max-w-7xl mx-auto mb-16">
+            <div className="flex flex-wrap justify-center gap-3 mb-10" data-testid="category-tabs">
+              {CATEGORIES.map((category) => {
+                const count = pdfTools.filter((t) => t.category === category).length;
+                const isActive = category === activeCategory;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setActiveCategory(category)}
+                    className={
+                      "rounded-xl px-5 py-3 text-sm font-medium transition-all duration-200 border " +
+                      (isActive
+                        ? "bg-gradient-warm text-background border-transparent font-semibold"
+                        : "bg-glass-bg/10 backdrop-blur-sm border-glass-border text-muted-foreground hover:text-foreground hover:border-glass-border/80")
+                    }
+                  >
+                    {category}
+                    <span className="ml-2 opacity-60 text-xs">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {visibleTools.map((tool, index) => (
+                <GlassPDFCard
+                  key={tool.id}
+                  title={tool.title}
+                  description={tool.description}
+                  icon={tool.icon}
+                  onClick={() => handleToolClick(tool.id)}
+                  delay={index * 100}
+                />
+              ))}
+            </div>
           </div>
         )}
 
