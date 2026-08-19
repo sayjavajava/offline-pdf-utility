@@ -26,7 +26,8 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
   unrestricted access to anyone who supplies the same one used to open the file.
 - **Edit Metadata**: Modify your PDF's title, author, subject, and keywords.
 - **Convert to PDF**: Convert JPEG, PNG, or DOCX files to PDF format, with genuinely selectable,
-  searchable text for DOCX — not a rasterized image of the page.
+  searchable text for DOCX — not a rasterized image of the page. Select several images at once to
+  combine them into one multi-page PDF, in the order you choose.
 - **Add Watermark**: Apply a text watermark to every page of your PDF.
 - **Rotate Pages**: Rotate selected pages (or the whole document) by 90°, 180°, or 270°.
 - **Delete / Reorder Pages**: Keep pages in a custom order; omit pages to delete them.

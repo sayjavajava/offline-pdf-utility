@@ -575,11 +575,28 @@ describe("ConvertTool (T-10)", () => {
     convertImageToPdf.mockResolvedValue(new Blob(["x"]));
     render(<ConvertTool />);
 
-    await upload(screen.getByLabelText(/file to convert/i), file);
+    await upload(screen.getByLabelText(/file.*to convert/i), file);
     await user.click(screen.getByRole("button", { name: /convert to pdf/i }));
 
-    await waitFor(() => expect(convertImageToPdf).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(convertImageToPdf).toHaveBeenCalledWith([file]));
     expect(screen.getByText(/selectable and searchable/i)).toBeInTheDocument();
+  });
+
+  it("combines multiple selected images into one PDF (F-22)", async () => {
+    const user = userEvent.setup();
+    const first = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], "a.jpg", { type: "image/jpeg" });
+    const second = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], "b.jpg", { type: "image/jpeg" });
+    detectImageFormat.mockReturnValue("jpeg");
+    convertImageToPdf.mockResolvedValue(new Blob(["x"]));
+    render(<ConvertTool />);
+
+    await upload(screen.getByLabelText(/file.*to convert/i), [first, second]);
+    await user.click(screen.getByRole("button", { name: /convert to pdf/i }));
+
+    await waitFor(() => expect(convertImageToPdf).toHaveBeenCalledWith([first, second]));
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Success!", description: expect.stringMatching(/combined 2 images/i) }),
+    );
   });
 
   it("still toasts on non-Error rejection (P0-5)", async () => {
@@ -590,7 +607,7 @@ describe("ConvertTool (T-10)", () => {
     detectImageFormat.mockReturnValue("jpeg");
     convertImageToPdf.mockRejectedValue("boom");
     render(<ConvertTool />);
-    await upload(screen.getByLabelText(/file to convert/i), file);
+    await upload(screen.getByLabelText(/file.*to convert/i), file);
     await user.click(screen.getByRole("button", { name: /convert to pdf/i }));
     await waitFor(() =>
       expect(reportToolError).toHaveBeenCalledWith(toastSpy, "Error converting file", "boom"),

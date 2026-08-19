@@ -7,6 +7,11 @@ large documents, not estimates. Every number below came from `scripts/bench-larg
 Playwright, the same way `check:offline:runtime` does, and drive each tool exactly as a user
 would: pick a file, fill the form, click the button, wait for the download.
 
+**Convention:** any PR that adds a new feature or changes how an existing one processes a
+user's file gets a real large-scale run added or updated here, in the same PR — not deferred to
+"later" and not left for someone to notice is missing. A feature that works on a 3-page test
+fixture and has never been run at realistic scale is unverified, not done.
+
 ## Test documents
 
 Synthetic PDFs generated in-memory (`@cantoo/pdf-lib`), sized to resemble a real office
@@ -62,6 +67,24 @@ module or doing per-page rendering — re-run against a much heavier, denser doc
 
 Nothing failed, crashed, or hit a memory ceiling at 74.6 MB.
 
+## Results — combining images into one PDF (F-22)
+
+Convert to PDF's batch mode (select several JPEG/PNG files, get one multi-page PDF back) has a
+different shape than the rest of this document: many separate input files rather than one large
+one. Measured with `scripts/bench-image-batch.mjs`, same real-browser methodology — each image
+is independently generated, incompressible noise, so file size isn't inflated by compression the
+way a solid-color test image would be:
+
+| Tier | Images | Total input | Result | Time |
+|---|---|---|---|---|
+| Realistic | 50 (300×300) | 12.9 MB | correct 50-page PDF | 1.5s |
+| Heavy | 200 (500×500) | 143.2 MB | correct 200-page PDF | 12.1s |
+
+This operation is worker-dispatched (`pdf-utils.ts` routes `convertImageToPdf` through the
+worker, unlike Redact or DOCX conversion), so the UI stays responsive while it runs even at the
+heavy tier. Both runs produced the exact expected page count — verified by loading the actual
+downloaded PDF, not just checking that a download happened.
+
 ## Reproduce it yourself
 
 ```bash
@@ -70,6 +93,9 @@ npm run bench:large-pdf                                    # 400-page tier, core
 BENCH_PAGES=800 BENCH_IMG_EVERY=5 BENCH_IMG_SIZE=400 \
   npm run bench:large-pdf                                  # heavy tier
 BENCH_SUBSET="Compress,Protect" npm run bench:large-pdf     # only matching tools
+
+npm run bench:image-batch                                  # 50-image tier
+BENCH_IMAGES=200 BENCH_IMG_SIZE=500 npm run bench:image-batch  # 200-image heavy tier
 ```
 
 The core suite covers the operations most likely to regress on a future change — the six

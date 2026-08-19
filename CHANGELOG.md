@@ -22,6 +22,9 @@ isn't optional bookkeeping — it's what the release notes are made of.
 
 ### Added
 
+- **Convert to PDF**: select several JPEG/PNG images at once to combine them
+  into one multi-page PDF, in the order shown, instead of converting each one
+  separately and merging them afterward.
 - Large-file performance is now documented and benchmarked
   ([`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)) — real measured results on
   hundreds of pages and tens of MB, not estimates.
