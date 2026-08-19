@@ -74,25 +74,50 @@ page.on("requestfailed", (request) => {
 await page.goto(DIST, { waitUntil: "load" });
 await page.waitForTimeout(1200);
 
-const tools = await page.locator("h3").allTextContents();
-if (tools.length === 0) {
-  console.error("✗ The dashboard rendered no tools — the page did not start from file://.");
+// Tools are grouped under category tabs (F-23) — only the active category's
+// cards are in the DOM, so every tool must be discovered per-tab, not off a
+// single flat query.
+const categoryTabs = await page.locator("[data-testid=category-tabs] button").allTextContents();
+if (categoryTabs.length === 0) {
+  console.error("✗ The dashboard rendered no category tabs — the page did not start from file://.");
   await browser.close();
   process.exit(1);
 }
 
-// Open every tool. A tool that only reaches out when opened would otherwise
-// slip through a check that never leaves the dashboard.
-for (const tool of tools) {
-  await page.goto(DIST, { waitUntil: "load" });
-  await page.waitForTimeout(250);
-  await page.locator("h3", { hasText: tool }).first().click();
-  await page.waitForTimeout(250);
+const toolsByCategory = [];
+for (let i = 0; i < categoryTabs.length; i++) {
+  await page.locator("[data-testid=category-tabs] button").nth(i).click();
+  await page.waitForTimeout(150);
+  const tools = await page.locator("h3").allTextContents();
+  toolsByCategory.push({ categoryIndex: i, tools });
+}
+const totalTools = toolsByCategory.reduce((n, c) => n + c.tools.length, 0);
+if (totalTools === 0) {
+  console.error("✗ No tool cards found in any category — the page did not start from file://.");
+  await browser.close();
+  process.exit(1);
+}
+
+// Open every tool, in every category. A tool that only reaches out when
+// opened would otherwise slip through a check that never leaves the
+// dashboard.
+for (const { categoryIndex, tools } of toolsByCategory) {
+  for (const tool of tools) {
+    await page.goto(DIST, { waitUntil: "load" });
+    await page.waitForTimeout(250);
+    await page.locator("[data-testid=category-tabs] button").nth(categoryIndex).click();
+    await page.waitForTimeout(150);
+    await page.locator("h3", { hasText: tool }).first().click();
+    await page.waitForTimeout(250);
+  }
 }
 
 // Then actually process a document, including the rendering path.
 await page.goto(DIST, { waitUntil: "load" });
 await page.waitForTimeout(400);
+const convertExportIndex = categoryTabs.findIndex((t) => t.startsWith("Convert & Export"));
+await page.locator("[data-testid=category-tabs] button").nth(convertExportIndex).click();
+await page.waitForTimeout(150);
 await page.locator("h3", { hasText: "PDF to Images" }).first().click();
 await page.waitForTimeout(250);
 await page.locator("input[type=file]").setInputFiles(samplePdf);
@@ -130,6 +155,6 @@ if (rendered === 0) {
 }
 
 console.log(
-  `✓ Offline runtime verified — ${tools.length} tools opened, a text PDF rendered ` +
-    `(${rendered} preview${rendered === 1 ? "" : "s"}), 0 network requests.`,
+  `✓ Offline runtime verified — ${totalTools} tools opened across ${categoryTabs.length} categories, ` +
+    `a text PDF rendered (${rendered} preview${rendered === 1 ? "" : "s"}), 0 network requests.`,
 );
