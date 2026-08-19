@@ -10,14 +10,18 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
 
 - **100% Offline**: Your files are never uploaded to a server, ensuring maximum privacy and security.
 - **Modern UI**: A beautiful and intuitive glassmorphism interface built with the Lovable UI framework.
-- **Split PDF**: Extract specific pages or page ranges from a PDF.
+- **Split PDF**: Extract specific pages or page ranges from a PDF, either as one combined file or
+  as a zip of individual per-page PDFs.
 - **Merge PDF**: Combine multiple PDF documents into a single file.
 - **Unlock PDF**: Remove password protection from an encrypted PDF, given its
   password. Supports both RC4 and AES encryption.
 - **Protect PDF**: Add a password to a PDF, encrypted with AES-256, so only someone who knows
-  it can open the file.
+  it can open the file. Optionally restrict printing, copying, or editing with a separate
+  permissions password — a distinct password is required, since PDF readers grant full,
+  unrestricted access to anyone who supplies the same one used to open the file.
 - **Edit Metadata**: Modify your PDF's title, author, subject, and keywords.
-- **Convert to PDF**: Convert JPEG, PNG, or DOCX files to PDF format.
+- **Convert to PDF**: Convert JPEG, PNG, or DOCX files to PDF format, with genuinely selectable,
+  searchable text for DOCX — not a rasterized image of the page.
 - **Add Watermark**: Apply a text watermark to every page of your PDF.
 - **Rotate Pages**: Rotate selected pages (or the whole document) by 90°, 180°, or 270°.
 - **Delete / Reorder Pages**: Keep pages in a custom order; omit pages to delete them.
@@ -29,6 +33,14 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
   can see the pages before choosing a range.
 - **Extract Text**: Pull the text out of a PDF as a plain text file. Scanned documents have no
   text layer and will come back empty — reading those needs OCR, which this tool does not do.
+- **Compress PDF**: Shrink a PDF by recompressing its embedded images and content streams —
+  mainly effective on image-heavy documents.
+- **Crop / Resize Pages**: Trim margins non-destructively (content is untouched, only the
+  visible window shrinks), or rescale pages to a target paper size with content scaled
+  proportionally to fit.
+- **Redact PDF**: Draw boxes over content to permanently delete it — the underlying text and
+  image data is removed, not just painted over, so nothing under a box stays selectable,
+  copyable, or searchable.
 
 ## How to Use
 
@@ -123,10 +135,15 @@ committed, so they cannot drift out of step with it on an upgrade.
 - **@cantoo/pdf-lib** — reading and writing PDFs. A maintained fork of `pdf-lib`, used because it
   implements the standard security handler and can therefore open password-protected documents,
   which upstream cannot.
-- **pdf.js** — rasterising pages for the thumbnail previews and PNG export. The *legacy* build is
-  used deliberately, since the modern one relies on a JavaScript feature not yet in every browser.
-- **mammoth.js** + **html2pdf.js** — DOCX conversion. Note this path renders through a canvas, so
-  the resulting text is an image rather than selectable text.
+- **pdf.js** — rasterising pages for the thumbnail previews, PNG export, and redaction. The
+  *legacy* build is used deliberately, since the modern one relies on a JavaScript feature not yet
+  in every browser.
+- **qpdf**, compiled to WASM — encrypting PDFs (writing a password, which neither pdf-lib nor its
+  fork can do) and recompressing them. Loaded via a base64 `data:` URI built from the bundled
+  binary, so it runs with zero network requests even though its own loader only knows how to
+  `fetch()` a sibling file.
+- **mammoth.js** — parses DOCX into HTML, which a custom layout engine then lays out directly onto
+  a PDF page via pdf-lib — genuinely selectable, searchable text, not a rasterized image.
 - **Tailwind CSS** + **shadcn/ui** (Radix) — styling and the handful of UI primitives still in use.
 - **Vitest** + **React Testing Library** — the test suite.
 
