@@ -42,6 +42,9 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
   image data is removed, not just painted over, so nothing under a box stays selectable,
   copyable, or searchable.
 
+Handles real-world large documents well — see [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for
+measured results on hundreds of pages and tens of MB, not just estimates.
+
 ## How to Use
 
 This tool is designed to be simple and intuitive. All processing happens directly in your browser, ensuring your files remain private.

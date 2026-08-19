@@ -25,6 +25,7 @@
     "test:coverage": "vitest run --coverage",
     "check:offline": "node scripts/check-offline.mjs",
     "check:offline:runtime": "node scripts/check-offline-runtime.mjs",
+    "bench:large-pdf": "node scripts/bench-large-pdf.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
