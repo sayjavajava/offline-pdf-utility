@@ -90,8 +90,7 @@ describe("resizePdf (F-15)", () => {
   });
 
   it("actually moves drawn content by the scale factor, not just the box dimensions", async () => {
-    // Direct test of the Accept criterion in docs/CODE_AUDIT.md: a known
-    // reference point must move by the expected scale factor, verified
+    // A known reference point must move by the expected scale factor, verified
     // against the raw content stream — not merely that the box now reads the
     // target size (a naive setSize()-only implementation would pass that
     // alone while silently clipping or blank-padding the content instead).
