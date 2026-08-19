@@ -14,11 +14,20 @@ isn't optional bookkeeping — it's what the release notes are made of.
 
 ## [Unreleased]
 
+### Changed
+
+- The dashboard now groups tools into four category tabs (Organize Pages,
+  Security, Convert & Export, Edit & Enhance) instead of one long list of
+  16 cards — only the selected category's tools are shown at once.
+
 ### Added
 
 - **Convert to PDF**: select several JPEG/PNG images at once to combine them
   into one multi-page PDF, in the order shown, instead of converting each one
   separately and merging them afterward.
+- Large-file performance is now documented and benchmarked
+  ([`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)) — real measured results on
+  hundreds of pages and tens of MB, not estimates.
 
 ## [0.2.0] - 2026-08-19
 
