@@ -87,7 +87,7 @@ jobs:
       # Keep the artifact downloadable from every run so a failure is
       # inspectable, not just a red check.
       - name: Upload offline build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: offgridpdf-html
           path: dist/offgridpdf.html
