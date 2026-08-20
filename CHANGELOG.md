@@ -42,6 +42,15 @@ isn't optional bookkeeping — it's what the release notes are made of.
   without the other. Read-only; produces a downloadable text report, not a
   new PDF.
 
+### Fixed
+
+- **PDF to Images**: the page preview used to render the entire document
+  just to display 12 thumbnails, freezing the tab for several seconds on a
+  large file (measured: 8.4s at 400 pages, 15.6s at 800). It now renders
+  only the pages it shows, regardless of document size, and says so
+  ("first 12 of 400 pages") instead of implying the whole document was
+  scanned.
+
 ## [0.2.0] - 2026-08-19
 
 Five new tools, a security fix, and a full dependency vulnerability cleanup —
