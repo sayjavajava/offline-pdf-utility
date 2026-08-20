@@ -190,6 +190,11 @@ other lockfiles.
 
 GPL-3.0-or-later. See [`LICENSE`](LICENSE).
 
+## Security
+
+Found a vulnerability? Please don't open a public issue — see [`SECURITY.md`](SECURITY.md) for
+how to report it privately.
+
 ## Contribution Guidelines
 
 We welcome contributions! If you have an idea for a new feature or have found a bug, please open an issue to discuss it. Pull requests are also welcome. Add a bullet to [`CHANGELOG.md`](CHANGELOG.md)'s `## [Unreleased]` section as part of your PR if it's user-facing — see [`RELEASING.md`](RELEASING.md) for the full release process, including what happens to older versions once a new one ships.
