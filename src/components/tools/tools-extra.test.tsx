@@ -53,10 +53,11 @@ vi.mock("@/lib/pdf-utils", async () => {
 // browser checks.
 const renderPdfPages = vi.fn();
 const extractPdfText = vi.fn();
+const getPageCount = vi.fn();
 vi.mock("@/lib/pdf-render", () => ({
   renderPdfPages: (...args: unknown[]) => renderPdfPages(...args),
   extractPdfText: (...args: unknown[]) => extractPdfText(...args),
-  getPageCount: vi.fn(),
+  getPageCount: (...args: unknown[]) => getPageCount(...args),
 }));
 
 import { RotateTool } from "./RotateTool";
@@ -76,8 +77,10 @@ beforeEach(() => {
   extractImages.mockReset();
   renderPdfPages.mockReset();
   extractPdfText.mockReset();
+  getPageCount.mockReset();
   // Previews fire on mount; default to "nothing rendered" unless a case says otherwise.
   renderPdfPages.mockResolvedValue([]);
+  getPageCount.mockResolvedValue(1);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -248,6 +251,7 @@ describe("PdfToImagesTool (T-10 / F-4, F-5)", () => {
   });
 
   it("renders thumbnails once a file is chosen (F-5)", async () => {
+    getPageCount.mockResolvedValue(2);
     renderPdfPages.mockResolvedValue([
       { pageNumber: 1, bytes: new Uint8Array([1]), width: 10, height: 10 },
       { pageNumber: 2, bytes: new Uint8Array([2]), width: 10, height: 10 },
@@ -255,6 +259,55 @@ describe("PdfToImagesTool (T-10 / F-4, F-5)", () => {
     render(<PdfToImagesTool />);
     await upload(pdfInput(), await makePdfFile(2));
     await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(2));
+  });
+
+  it("only requests the pages the preview will display, not the whole document (F-20)", async () => {
+    getPageCount.mockResolvedValue(400);
+    renderPdfPages.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => ({
+        pageNumber: i + 1,
+        bytes: new Uint8Array([i]),
+        width: 10,
+        height: 10,
+      })),
+    );
+    render(<PdfToImagesTool />);
+    await upload(pdfInput(), await makePdfFile(400));
+    await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(12));
+
+    // The preview call (the first one made) must ask for exactly pages 1-12,
+    // not `undefined` (which pdf-render.ts treats as "every page") — that's
+    // the whole fix: rendering 400 pages to show 12 was the bug.
+    const previewCall = renderPdfPages.mock.calls[0][1];
+    expect(previewCall.pageNumbers).toEqual(Array.from({ length: 12 }, (_, i) => i + 1));
+  });
+
+  it("says how many of the total pages the preview covers, when there are more than shown", async () => {
+    getPageCount.mockResolvedValue(400);
+    renderPdfPages.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => ({
+        pageNumber: i + 1,
+        bytes: new Uint8Array([i]),
+        width: 10,
+        height: 10,
+      })),
+    );
+    render(<PdfToImagesTool />);
+    await upload(pdfInput(), await makePdfFile(400));
+    expect(await screen.findByText(/first 12 of 400 pages/i)).toBeInTheDocument();
+  });
+
+  it("doesn't claim a truncation when every page already fits in the preview", async () => {
+    getPageCount.mockResolvedValue(3);
+    renderPdfPages.mockResolvedValue([
+      { pageNumber: 1, bytes: new Uint8Array([1]), width: 10, height: 10 },
+      { pageNumber: 2, bytes: new Uint8Array([2]), width: 10, height: 10 },
+      { pageNumber: 3, bytes: new Uint8Array([3]), width: 10, height: 10 },
+    ]);
+    render(<PdfToImagesTool />);
+    await upload(pdfInput(), await makePdfFile(3));
+    await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(3));
+    expect(screen.queryByText(/first \d+ of \d+ pages/i)).not.toBeInTheDocument();
   });
 
   it("does not blow up the tool when the preview fails", async () => {
