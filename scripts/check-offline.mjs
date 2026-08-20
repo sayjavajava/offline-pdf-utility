@@ -38,7 +38,7 @@ const MAIN_PAGE = "offgridpdf.html";
 
 // Files the page never requests: they exist only if a host or OS asks for them
 // out-of-band, and their absence does not stop the app working offline.
-const INERT_SIBLINGS = new Set([MAIN_PAGE, "favicon.ico", "robots.txt", "placeholder.svg"]);
+const INERT_SIBLINGS = new Set([MAIN_PAGE, "robots.txt"]);
 
 // ---------------------------------------------------------------------------
 // 1. One self-contained page
