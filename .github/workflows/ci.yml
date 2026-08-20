@@ -147,7 +147,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Attach the offline build to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release/offgridpdf.html
