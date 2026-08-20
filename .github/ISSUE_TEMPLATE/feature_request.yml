@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a new tool or an improvement to an existing one
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before requesting something that needs a server, an account, or storing data anywhere —
+        this app is entirely client-side by design (see [`CONTRIBUTING.md`](https://github.com/sayjavajava/offline-pdf-utility/blob/main/CONTRIBUTING.md#scope)),
+        and that's not going to change. Everything else is fair game.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: What are you trying to do that the app doesn't currently support?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would the tool or change actually look like/do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other way to solve this, including with an existing tool in the app?

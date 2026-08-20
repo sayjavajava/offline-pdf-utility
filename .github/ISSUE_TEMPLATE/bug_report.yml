@@ -1,0 +1,66 @@
+name: Bug report
+description: Something in the app doesn't work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. A few things that make a bug report
+        actionable:
+
+        - **Found a security issue** (something that could leak a file's contents, or make the
+          app phone home)? Please use
+          [private reporting](https://github.com/sayjavajava/offline-pdf-utility/security/advisories/new)
+          instead of a public issue — see
+          [`SECURITY.md`](https://github.com/sayjavajava/offline-pdf-utility/blob/main/SECURITY.md).
+        - **Don't attach a PDF/DOCX/image with real personal or sensitive content.** This is a
+          privacy-focused tool; if a file is needed to reproduce the bug, build or find a
+          minimal one that doesn't contain anything you wouldn't want public, since issues are
+          public by default.
+
+  - type: input
+    id: tool
+    attributes:
+      label: Which tool
+      description: e.g. "Split PDF", "Compare PDFs"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, what actually happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: As specific as you can — what settings, what kind of file (page count, size, encrypted or not), what you clicked.
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: e.g. Firefox 130 on Windows 11
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: The release you downloaded (visible in the filename or the Releases page), or "built from source at commit ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output, if any
+      description: Open your browser's DevTools console (F12) before reproducing — an error there is often the whole diagnosis.
+      render: shell

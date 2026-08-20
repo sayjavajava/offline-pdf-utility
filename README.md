@@ -197,7 +197,10 @@ how to report it privately.
 
 ## Contribution Guidelines
 
-We welcome contributions! If you have an idea for a new feature or have found a bug, please open an issue to discuss it. Pull requests are also welcome. Add a bullet to [`CHANGELOG.md`](CHANGELOG.md)'s `## [Unreleased]` section as part of your PR if it's user-facing — see [`RELEASING.md`](RELEASING.md) for the full release process, including what happens to older versions once a new one ships.
+We welcome contributions! See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to set up the
+project, what a PR should include, and what's in/out of scope. Participation is governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md). See [`RELEASING.md`](RELEASING.md) for the release
+process, including what happens to older versions once a new one ships.
 
 ## Support
 
