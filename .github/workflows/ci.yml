@@ -133,7 +133,7 @@ jobs:
       # zero network requests — and the promise users are asked to trust is
       # about the bytes they download, not about a build that resembles them.
       - name: Download the verified offline build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: offgridpdf-html
           path: release
