@@ -27,6 +27,16 @@ jobs:
 
       - run: npm ci
 
+      # Dependabot's security-update PRs are reactive (fired per advisory);
+      # this is the check that runs on every single push so a newly
+      # disclosed vulnerability in what actually ships (production deps
+      # only — dev tooling never reaches dist/offgridpdf.html) can't sit
+      # unnoticed between Dependabot's own runs. --audit-level=high so a
+      # low-severity advisory in an unused code path doesn't flap the build;
+      # bump this threshold down, not up, if that turns out to be wrong.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -44,6 +54,26 @@ jobs:
       # checks stop that from silently regressing on a dependency bump.
       - name: Check offline build is self-contained
         run: npm run check:offline
+
+      # Playwright's own version, not a hand-maintained number: keeps this
+      # key correct across a `playwright` bump without anyone remembering to
+      # update it.
+      - name: Get installed Playwright version
+        id: playwright-version
+        run: echo "version=$(node -e "console.log(require('./package-lock.json').packages['node_modules/playwright'].version)")" >> "$GITHUB_OUTPUT"
+
+      # Caches only the ~150MB browser binary, not OS packages: GitHub-hosted
+      # runners are a fresh VM every run, so apt-installed libraries never
+      # persist between runs regardless of this cache. `--with-deps` below
+      # still has to run every time for those; what this cache buys is
+      # skipping the browser re-download when the binary itself is already
+      # there. `install --with-deps` itself skips re-downloading a browser
+      # this cache already restored, so no separate conditional is needed.
+      - name: Cache Playwright browser binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Install Chromium for the runtime offline check
         run: npx playwright install --with-deps chromium
