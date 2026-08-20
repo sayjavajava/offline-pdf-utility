@@ -226,6 +226,20 @@ await timed("Redact — page-size scan on file select", async () => {
   await page.waitForSelector(`text=/Page 1 of ${PAGES}/`, { timeout: 180000 });
 });
 
+// F-19: Compare renders and text-extracts every shared page of *both* files
+// on the main thread — the most expensive per-page cost in the app, doubled.
+// Comparing the file against itself is still the full-cost path (no
+// equality short-circuit), so it's a fair worst-case-shaped measurement.
+await timed("Compare PDFs (same file vs itself, full page-by-page diff)", async () => {
+  await openTool("Convert & Export", "Compare PDFs");
+  const inputs = page.locator("input[type=file]");
+  await inputs.nth(0).setInputFiles(bigPdfPath);
+  await inputs.nth(1).setInputFiles(bigPdfPath);
+  await page.waitForTimeout(200);
+  await page.getByRole("button", { name: /^compare$/i }).click();
+  await page.waitForSelector(`text=/Page ${PAGES}:/`, { timeout: 300000 });
+});
+
 await browser.close();
 
 console.log("\n--- Summary ---");

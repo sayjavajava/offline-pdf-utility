@@ -127,6 +127,50 @@ preview now touches a fixed 12 pages regardless of how many the document actuall
 path (what a user actually downloads) was never affected — it already rendered only the pages
 requested.
 
+## Results — Compare PDFs (F-19)
+
+Compare renders and text-extracts every shared page of *both* files — the most expensive
+per-page cost in the app, doubled. The first real run exposed a genuine bug, not just a slow
+number: `renderPdfPages`/`extractPdfText` each open the document fresh on every call
+(`pdf-render.ts`'s `loadDocument`), and the initial implementation called them once *per page*,
+so comparing a 400-page document reopened (and re-parsed) each file 400 times over. Batched into
+one call per file per signal instead — covering every shared page in a single call, the same
+shape every other multi-page tool in this app already uses — before this ever shipped:
+
+| Tier | Pages | Before (per-page calls) | After (batched) |
+|---|---|---|---|
+| Realistic | 400 | 136.0s | 12.6s |
+| Heavy | 800 | *(not run — 136s at 400 pages was reason enough to fix first)* | 28.0s |
+
+Included in `scripts/bench-large-pdf.mjs`'s core suite (`npm run bench:large-pdf`), comparing the
+big fixture against itself — the full-cost path, since there's no equality short-circuit.
+Progress reporting changed shape along with the fix: `onProgress` now reports steps completed
+across all four batched streams (text + render, both files) rather than one call per literal
+page, so the UI still moves smoothly instead of jumping from 0 to 100% once the batched calls
+land — shown in the tool as a percentage rather than "page X of Y", since the step count no
+longer maps 1:1 to a single page finishing.
+
+Verified end to end against the real built app (not just the benchmark) with four small,
+purpose-built fixtures: an identical file compared to itself (every page reported identical, 0%
+pixel difference); a file with one page's text changed (that page, and only that page, flagged
+as differing); a file with one fewer page (the extra trailing page correctly reported as "only in
+A"); and a file with one page resized to different dimensions (correctly flagged as visually
+different with no pixel ratio, since a ratio would be meaningless across different pixel
+dimensions).
+
+**A real correctness bug turned up during that last case, and was fixed before this shipped.**
+The initial implementation also ran the text comparison on differently-sized pages, and a resized
+page came back flagged as *textually* different too — even with the page's underlying content
+byte-for-byte identical, just drawn onto a smaller MediaBox. Traced to pdf.js itself: its text
+extraction clips text runs that extend past a page's MediaBox, so a page that was only resized
+(never re-edited) can extract as visibly shorter text. Reporting that as "text differs" would
+tell a user their content changed when it didn't — a false positive, not a curiosity. Fixed by
+not evaluating the text signal at all for differently-sized pages (`textDiffers` is `undefined`
+there, not `true`/`false`); the size change is already captured by `visuallyDiffers`, so nothing
+about the pages actually differing goes unreported. Re-verified against the real built app: the
+same resized-page fixture, with identical underlying wording, now reports "Different page size"
+with no mention of a text change.
+
 ## Reproduce it yourself
 
 ```bash
@@ -141,9 +185,10 @@ BENCH_IMAGES=200 BENCH_IMG_SIZE=500 npm run bench:image-batch  # 200-image heavy
 ```
 
 The core suite covers the operations most likely to regress on a future change — the six
-worker-dispatched bulk operations, plus both halves of PDF to Images — rather than all 16, to
-keep it fast enough to actually run before a release. The full 16-tool numbers above are a
-point-in-time comprehensive pass using the same methodology and fixture shapes.
+worker-dispatched bulk operations, both halves of PDF to Images, Redact's page-size scan, and
+Compare — rather than all 17, to keep it fast enough to actually run before a release. The full
+16-tool numbers above are a point-in-time comprehensive pass using the same methodology and
+fixture shapes, predating Compare PDFs.
 
 ## What this doesn't tell you
 
