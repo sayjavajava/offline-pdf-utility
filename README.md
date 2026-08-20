@@ -9,12 +9,12 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
 
 ## App Interface
 
-![OffGridPDF Interface](PDF-Utility-Professional-Document-Tools.png)
+![OffGridPDF Interface](docs/screenshot.jpg)
 
 ## Features
 
 - **100% Offline**: Your files are never uploaded to a server, ensuring maximum privacy and security.
-- **Modern UI**: A beautiful and intuitive glassmorphism interface built with the Lovable UI framework.
+- **Modern UI**: A beautiful and intuitive glassmorphism interface, styled with Tailwind CSS and shadcn/ui.
 - **Split PDF**: Extract specific pages or page ranges from a PDF, either as one combined file or
   as a zip of individual per-page PDFs.
 - **Merge PDF**: Combine multiple PDF documents into a single file.
@@ -55,7 +55,7 @@ measured results on hundreds of pages and tens of MB, not just estimates.
 
 This tool is designed to be simple and intuitive. All processing happens directly in your browser, ensuring your files remain private.
 
-1.  **Open the Application**: Access OffGridPDF through the provided live URL or by running it locally (see [Setup and Development](#setup-and-development)).
+1.  **Open the Application**: Download `offgridpdf.html` from the [Releases page](../../releases/latest) and open it in your browser — no install, no server. (For local development instead, see [Setup and Development](#setup-and-development).)
 2.  **Choose a Tool**: From the main dashboard, click on the tool you need, such as "Split PDF" or "Add Watermark".
 3.  **Follow the Steps**: Each tool will present you with simple options. This usually involves:
     *   Uploading your PDF or image file(s).
