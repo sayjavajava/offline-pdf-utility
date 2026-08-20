@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # Security updates already run without this file (see SECURITY.md) — this
+  # adds scheduled *version* updates too, so dependencies don't only move
+  # when a CVE forces them to.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # One PR for routine patch/minor bumps instead of a dozen separate
+      # ones — a solo-maintainer project doesn't need per-package review
+      # for a patch release. Majors stay ungrouped: those can be breaking
+      # and deserve their own PR and their own look.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
