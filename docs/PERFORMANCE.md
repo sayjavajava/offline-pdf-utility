@@ -136,9 +136,20 @@ pixel difference); a file with one page's text changed (that page, and only that
 as differing); a file with one fewer page (the extra trailing page correctly reported as "only in
 A"); and a file with one page resized to different dimensions (correctly flagged as visually
 different with no pixel ratio, since a ratio would be meaningless across different pixel
-dimensions — and, as a genuine consequence of how pdf.js extracts text, also flagged as textually
-different, since pdf.js clips text runs that extend past a page's MediaBox, which is legitimate
-behavior to surface, not a bug in this tool).
+dimensions).
+
+**A real correctness bug turned up during that last case, and was fixed before this shipped.**
+The initial implementation also ran the text comparison on differently-sized pages, and a resized
+page came back flagged as *textually* different too — even with the page's underlying content
+byte-for-byte identical, just drawn onto a smaller MediaBox. Traced to pdf.js itself: its text
+extraction clips text runs that extend past a page's MediaBox, so a page that was only resized
+(never re-edited) can extract as visibly shorter text. Reporting that as "text differs" would
+tell a user their content changed when it didn't — a false positive, not a curiosity. Fixed by
+not evaluating the text signal at all for differently-sized pages (`textDiffers` is `undefined`
+there, not `true`/`false`); the size change is already captured by `visuallyDiffers`, so nothing
+about the pages actually differing goes unreported. Re-verified against the real built app: the
+same resized-page fixture, with identical underlying wording, now reports "Different page size"
+with no mention of a text change.
 
 ## Reproduce it yourself
 

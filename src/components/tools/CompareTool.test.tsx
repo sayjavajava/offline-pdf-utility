@@ -104,6 +104,27 @@ describe("CompareTool (T-10 / F-19)", () => {
     expect(await screen.findByText(/page 2: text differs/i)).toBeInTheDocument();
   });
 
+  it("labels a differently-sized page as a size difference, not a text difference (P0)", async () => {
+    // pdf-compare.ts leaves textDiffers undefined for differently-sized pages,
+    // since pdf.js's text extraction is clipped to each page's MediaBox and
+    // can't be trusted there — reporting "text differs" would be a false
+    // positive. The component must not treat undefined as "no difference"
+    // (falling into "Identical") or fabricate a text-differs label either.
+    const user = userEvent.setup();
+    comparePdfs.mockResolvedValue({
+      pageCountA: 1,
+      pageCountB: 1,
+      pages: [{ page: 1, presence: "both", textDiffers: undefined, visuallyDiffers: true, pixelDiffRatio: undefined }],
+    });
+    render(<CompareTool />);
+    await upload(screen.getByLabelText(/pdf a/i), await makePdfFile(1, "a.pdf"));
+    await upload(screen.getByLabelText(/pdf b/i), await makePdfFile(1, "b.pdf"));
+    await user.click(screen.getByRole("button", { name: /^compare$/i }));
+    expect(await screen.findByText(/page 1: different page size/i)).toBeInTheDocument();
+    expect(screen.queryByText(/text differs/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/identical/i)).not.toBeInTheDocument();
+  });
+
   it("filters to differences only when the checkbox is checked", async () => {
     const user = userEvent.setup();
     comparePdfs.mockResolvedValue({

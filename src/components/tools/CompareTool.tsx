@@ -11,6 +11,10 @@ import { useToast } from '@/components/ui/use-toast';
 function describe(p: PageComparison): { label: string; tone: 'same' | 'diff' | 'edge' } {
   if (p.presence === 'onlyInA') return { label: 'Only in A (removed)', tone: 'edge' };
   if (p.presence === 'onlyInB') return { label: 'Only in B (added)', tone: 'edge' };
+  // Differently-sized pages: text isn't compared at all (see pdf-compare.ts —
+  // extraction is clipped to each page's MediaBox, so it can't be trusted
+  // there), and the size difference is already a real, visible difference.
+  if (p.textDiffers === undefined) return { label: 'Different page size', tone: 'diff' };
   if (!p.textDiffers && !p.visuallyDiffers) return { label: 'Identical', tone: 'same' };
   if (p.textDiffers && p.visuallyDiffers) return { label: 'Text and visual differences', tone: 'diff' };
   if (p.textDiffers) return { label: 'Text differs', tone: 'diff' };

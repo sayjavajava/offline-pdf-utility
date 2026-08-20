@@ -148,7 +148,7 @@ describe("comparePdfs (F-19)", () => {
     if (page.presence === "both") expect(page.visuallyDiffers).toBe(false);
   });
 
-  it("flags differently-sized pages as visually different without a pixel ratio", async () => {
+  it("flags differently-sized pages as visually different without a pixel ratio, and leaves text unevaluated", async () => {
     getPageCount.mockResolvedValueOnce(1).mockResolvedValueOnce(1);
     renderPdfPages
       .mockImplementationOnce(async () => [{ pageNumber: 1, bytes: new Uint8Array([0]), width: 100, height: 100 }])
@@ -159,6 +159,24 @@ describe("comparePdfs (F-19)", () => {
     if (page.presence === "both") {
       expect(page.visuallyDiffers).toBe(true);
       expect(page.pixelDiffRatio).toBeUndefined();
+      expect(page.textDiffers).toBeUndefined();
+    }
+  });
+
+  it("does not report a text difference for a resized page even when its extracted text is genuinely shorter (P0: pdf.js clips text extraction to a page's MediaBox — a resized page can extract truncated with the underlying wording unchanged; reporting that as a text change would be a false positive)", async () => {
+    getPageCount.mockResolvedValueOnce(1).mockResolvedValueOnce(1);
+    extractPdfText
+      .mockImplementationOnce(async () => [{ pageNumber: 1, text: "The quick brown fox jumps over the lazy dog." }])
+      .mockImplementationOnce(async () => [{ pageNumber: 1, text: "The quick bro" }]); // clipped by a smaller page, same content
+    renderPdfPages
+      .mockImplementationOnce(async () => [{ pageNumber: 1, bytes: new Uint8Array([0]), width: 400, height: 500 }])
+      .mockImplementationOnce(async () => [{ pageNumber: 1, bytes: new Uint8Array([0]), width: 200, height: 250 }]);
+
+    const result = await comparePdfs(fakeFile("a.pdf"), fakeFile("b.pdf"));
+    const [page] = result.pages;
+    if (page.presence === "both") {
+      expect(page.textDiffers).toBeUndefined();
+      expect(page.visuallyDiffers).toBe(true); // the real, reportable difference is the size change
     }
   });
 

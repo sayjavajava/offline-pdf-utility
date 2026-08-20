@@ -12,6 +12,19 @@
  *   - text: extracted text differs (exact match after trimming each line)
  *   - visual: rendered pixels differ beyond a small per-channel tolerance
  *     that absorbs anti-aliasing/PNG-encode noise, not real content
+ *
+ * The text signal is only trustworthy when both pages render at the same
+ * pixel dimensions. pdf.js's text extraction is bound by each page's own
+ * MediaBox — confirmed directly against pdf.js, not assumed — so a page
+ * that was resized (its content stream byte-for-byte identical, just a
+ * smaller page around it) can come back with genuinely truncated text,
+ * with nothing about the actual wording having changed. Reporting that as
+ * "text differs" would tell the user their content changed when it didn't,
+ * which is worse than reporting nothing: differently-sized pages are
+ * therefore left out of the text comparison entirely (`textDiffers` is
+ * `undefined`), not force-compared against an extraction that can't be
+ * trusted there. The dimension mismatch is already reported via
+ * `visuallyDiffers`, so nothing about the pages differing goes unreported.
  */
 import { renderPdfPages, extractPdfText, getPageCount } from './pdf-render';
 
@@ -21,7 +34,11 @@ export type PageComparison =
   | {
       page: number;
       presence: 'both';
-      textDiffers: boolean;
+      /** Undefined when the two pages render at different pixel dimensions —
+       * pdf.js's text extraction is clipped to each page's own MediaBox, so
+       * a resized page can extract as "different text" with the underlying
+       * wording unchanged. Not evaluated there rather than reported unreliably. */
+      textDiffers?: boolean;
       visuallyDiffers: boolean;
       /** Fraction of compared pixels that differ, 0–1. Omitted when the two
        * pages render at different pixel dimensions — a pixel-by-pixel ratio
@@ -131,11 +148,20 @@ export async function comparePdfs(
     const renderA = renderAList[i];
     const renderB = renderBList[i];
 
-    const textDiffers = normalizedText(textA.text) !== normalizedText(textB.text);
+    const sameDimensions = renderA.width === renderB.width && renderA.height === renderB.height;
+
+    // Not evaluated at all when the pages are differently sized — see the
+    // module docstring. Extracted text is bound by each page's own
+    // MediaBox, so a resized page can extract as "different text" with the
+    // underlying wording unchanged; comparing it here would report a false
+    // content change instead of the real, already-captured size change.
+    const textDiffers = sameDimensions
+      ? normalizedText(textA.text) !== normalizedText(textB.text)
+      : undefined;
 
     let visuallyDiffers: boolean;
     let ratio: number | undefined;
-    if (renderA.width === renderB.width && renderA.height === renderB.height) {
+    if (sameDimensions) {
       const [imageDataA, imageDataB] = await Promise.all([
         pngBytesToImageData(renderA.bytes),
         pngBytesToImageData(renderB.bytes),
