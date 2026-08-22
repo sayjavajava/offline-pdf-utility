@@ -105,7 +105,7 @@ export const PageNumbersTool = () => {
           id="format"
           value={format}
           onChange={(e) => setFormat(e.target.value as PageNumberFormat)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           {FORMATS.map((f) => (
             <option key={f.value} value={f.value}>{f.label}</option>
@@ -146,7 +146,7 @@ export const PageNumbersTool = () => {
           id="position"
           value={position}
           onChange={(e) => setPosition(e.target.value as PageNumberPosition)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           {POSITIONS.map((p) => (
             <option key={p} value={p}>{p.replace('-', ' ')}</option>
