@@ -2,14 +2,14 @@ import { FileText, Sparkles } from "lucide-react";
 
 export const GlassHeader = () => {
   return (
-    <header className="relative border-b border-glass-border bg-glass-bg/50 backdrop-blur-sm">
+    <header className="relative border-b border-glass-border bg-glass-bg/50 backdrop-blur-xs">
       <div className="container mx-auto px-6 py-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             {/* Logo with glass effect */}
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-warm rounded-xl blur-sm opacity-60"></div>
-              <div className="relative rounded-xl bg-glass-bg backdrop-blur-sm border border-glass-border p-3 shadow-glass">
+              <div className="absolute inset-0 bg-gradient-warm rounded-xl blur-xs opacity-60"></div>
+              <div className="relative rounded-xl bg-glass-bg backdrop-blur-xs border border-glass-border p-3 shadow-glass">
                 <FileText className="h-6 w-6 text-primary" />
               </div>
             </div>
@@ -34,7 +34,7 @@ export const GlassHeader = () => {
       </div>
       
       {/* Subtle gradient line */}
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-primary/50 to-transparent"></div>
     </header>
   );
 };

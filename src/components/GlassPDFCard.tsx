@@ -24,7 +24,7 @@ export const GlassPDFCard = ({ title, description, icon: Icon, onClick, delay = 
       role="button"
       tabIndex={0}
       aria-label={title}
-      className="group cursor-pointer overflow-hidden animate-slide-up bg-glass-bg/10 backdrop-blur-sm border border-glass-border shadow-glass hover:shadow-glass-hover transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="group cursor-pointer overflow-hidden animate-slide-up bg-glass-bg/10 backdrop-blur-xs border border-glass-border shadow-glass hover:shadow-glass-hover transition-all duration-300 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       style={{ animationDelay: `${delay}ms` }}
       onClick={activate}
       onKeyDown={onKeyDown}
@@ -35,7 +35,7 @@ export const GlassPDFCard = ({ title, description, icon: Icon, onClick, delay = 
         <div className="relative mb-6 flex justify-center">
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-warm rounded-2xl blur-md opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="relative rounded-2xl bg-glass-bg backdrop-blur-sm border border-glass-border p-4 group-hover:shadow-glass-hover transition-all duration-500">
+            <div className="relative rounded-2xl bg-glass-bg backdrop-blur-xs border border-glass-border p-4 group-hover:shadow-glass-hover transition-all duration-500">
               <Icon className="h-8 w-8 text-primary group-hover:text-primary-soft transition-colors duration-300" aria-hidden="true" />
             </div>
           </div>
