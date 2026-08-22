@@ -95,7 +95,7 @@ async function loadDocument(file: File, password?: string) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/password/i.test(message)) {
-      throw new Error('This PDF is password protected. Enter its password to continue.');
+      throw new Error('This PDF is password protected. Enter its password to continue.', { cause: error });
     }
     throw error;
   }

@@ -37,6 +37,11 @@ export const PdfToImagesTool = () => {
   // only the pages that will be shown.
   useEffect(() => {
     if (!file) {
+      // Clearing stale preview state when the selected file goes away —
+      // the rest of this same effect does real async work for the non-null
+      // case below, so this reset belongs here with it rather than split
+      // into a separate render-time comparison for one branch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreviews([]);
       setTotalPages(null);
       return;
