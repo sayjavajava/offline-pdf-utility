@@ -11,6 +11,7 @@
 // legacy bundle carries the polyfills, which matters doubly here because this
 // app is distributed as a file people open in whatever browser they have.
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import type { PDFPageProxy, PageViewport } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import PdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline';
 import { PACKED_CMAPS } from './pdf-cmaps.generated';
 import { inflateDeflated } from './inflate';
@@ -145,6 +146,48 @@ export async function extractPdfText(
       .trimEnd();
 
     out.push({ pageNumber, text });
+    page.cleanup();
+    onProgress?.(index + 1, targets.length);
+  }
+
+  await doc.cleanup();
+  return out;
+}
+
+export type PageTextData = {
+  pageNumber: number;
+  content: Awaited<ReturnType<PDFPageProxy['getTextContent']>>;
+  viewport: PageViewport;
+};
+
+/**
+ * Pull each page's raw `TextContent` and scale-1 viewport (F-24, Find &
+ * Redact) — the two things a caller needs to both search a page's text and,
+ * for pages that actually match, position a real `pdf.js` `TextLayer` over
+ * it. No rendering and no font measurement happens here, so this is as cheap
+ * as `extractPdfText`/`getPageSizes` above, not the render pipeline.
+ *
+ * Kept distinct from `extractPdfText`: that function's return shape (plain
+ * per-page strings) is already public API other tools depend on, and
+ * `TextContent` must be handed to `TextLayer` untouched, not reduced to text.
+ */
+export async function getPageTextData(
+  file: File,
+  { pageNumbers, password, onProgress }: {
+    pageNumbers?: number[];
+    password?: string;
+    onProgress?: (done: number, total: number) => void;
+  } = {},
+): Promise<PageTextData[]> {
+  const doc = await loadDocument(file, password);
+  const targets = resolveTargets(pageNumbers, doc.numPages);
+
+  const out: PageTextData[] = [];
+  for (const [index, pageNumber] of targets.entries()) {
+    const page = await doc.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
+    out.push({ pageNumber, content, viewport });
     page.cleanup();
     onProgress?.(index + 1, targets.length);
   }

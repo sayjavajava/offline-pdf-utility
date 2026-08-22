@@ -1,0 +1,76 @@
+/**
+ * F-24: the minimum CSS pdf.js's own `TextLayer` class (imported directly
+ * from `pdfjs-dist`'s core bundle in pdf-search.ts) needs to lay glyphs out
+ * at their real, correct size and position.
+ *
+ * `TextLayer` sets each span's position via `left`/`top` (inline styles),
+ * but its actual font-size and rotation are driven entirely by CSS custom
+ * properties it sets per-span (`--font-height`, `--scale-x`, `--rotate`)
+ * combined with rules that read them — without this CSS, every span renders
+ * at the browser's default font-size instead of the PDF's real one, and
+ * `getClientRects()` (used to build a match's redaction box) comes back
+ * with the wrong size and a real vertical offset. Confirmed directly: an
+ * early version of this feature without this file placed every found box a
+ * consistent amount too high, caught by a real end-to-end check (search,
+ * screenshot, apply, re-render the output) before this shipped.
+ *
+ * Rather than hand-copy a reduced guess at what's needed (this project's own
+ * `pdf-cmaps.generated.ts` sets the precedent of vendoring straight from
+ * pdfjs-dist rather than reimplementing), this is copied verbatim in
+ * substance — just flattened out of pdfjs-dist's native CSS nesting, which
+ * some of this app's supported browsers don't parse — from the `.textLayer`
+ * rule in `pdfjs-dist/web/pdf_viewer.css` (pinned to this project's
+ * `pdfjs-dist` version — re-diff this block on any future bump). Only the
+ * geometry-affecting rules are kept; selection/highlight-editing/annotation
+ * cosmetics from the same source rule are dropped as irrelevant to a layer
+ * that's never shown or selected.
+ */
+.textLayer {
+  line-height: 1;
+  transform-origin: 0 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.textLayer span,
+.textLayer br {
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0% 0%;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer .markedContent {
+  display: contents;
+}
+
+/*
+ * `TextLayer` lays every item out in the page's own *un-rotated*
+ * content-stream space (sized to `viewport.rawDims`, not the rotation-
+ * adjusted `viewport.width`/`height`) and marks the container with a
+ * `data-main-rotation` attribute (set by pdf.js's own `setLayerDimensions`,
+ * called from `TextLayer`'s constructor) — rotating the *whole layer* into
+ * its correctly-displayed orientation is left entirely to this CSS rule.
+ * Without it, every position is read as if the page had never been
+ * rotated at all. Copied verbatim (values only, selector scoped to
+ * `.textLayer` instead of pdfjs-dist's unscoped original) from the
+ * `[data-main-rotation]` rules in the same `pdf_viewer.css`.
+ */
+.textLayer[data-main-rotation="90"] {
+  transform: rotate(90deg) translateY(-100%);
+}
+.textLayer[data-main-rotation="180"] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+.textLayer[data-main-rotation="270"] {
+  transform: rotate(270deg) translateX(-100%);
+}
