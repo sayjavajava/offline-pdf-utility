@@ -51,6 +51,11 @@ vi.mock("@/lib/pdf-render", () => ({
   getPageSizes: (...args: unknown[]) => getPageSizes(...args),
 }));
 
+const findTextMatches = vi.fn();
+vi.mock("@/lib/pdf-search", () => ({
+  findTextMatches: (...args: unknown[]) => findTextMatches(...args),
+}));
+
 import { RedactTool } from "./RedactTool";
 
 beforeEach(() => {
@@ -60,6 +65,7 @@ beforeEach(() => {
   redactPdf.mockReset();
   renderPdfPages.mockReset();
   getPageSizes.mockReset();
+  findTextMatches.mockReset();
   renderPdfPages.mockResolvedValue([{ pageNumber: 1, bytes: new Uint8Array([1, 2, 3]), width: 300, height: 450 }]);
   getPageSizes.mockResolvedValue([{ width: 200, height: 300 }]);
   // jsdom has no real object-URL/blob machinery worth exercising here.
@@ -302,5 +308,153 @@ describe("RedactTool — apply box to other pages (F-21)", () => {
     await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(2));
     await screen.findByAltText(/page 1/i);
     expect(screen.queryByLabelText(/apply this page's box/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("RedactTool — Find & Redact (F-24)", () => {
+  it("calls findTextMatches with the query, case-sensitivity, and password, and reports the result", async () => {
+    const user = userEvent.setup();
+    findTextMatches.mockResolvedValue({
+      totalMatches: 2,
+      matchesByPage: { 1: [{ x: 0, y: 0, width: 10, height: 10 }, { x: 20, y: 0, width: 10, height: 10 }] },
+      skippedByPage: {},
+      noTextLayerPages: [],
+    });
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(1));
+    await screen.findByAltText(/page 1/i);
+
+    await user.type(screen.getByLabelText(/find text to redact/i), "Acme Corp");
+    await user.click(screen.getByLabelText(/match case/i));
+    await user.type(screen.getByLabelText(/password/i), "pw");
+    await user.click(screen.getByRole("button", { name: /^find$/i }));
+
+    await waitFor(() => expect(findTextMatches).toHaveBeenCalled());
+    const [file, query, options] = findTextMatches.mock.calls[0];
+    expect(file).toBeInstanceOf(File);
+    expect(query).toBe("Acme Corp");
+    expect(options).toMatchObject({ caseSensitive: true, password: "pw" });
+
+    expect(await screen.findByText(/found 2 matches across 1 page\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add all 2 as redaction boxes/i })).toBeInTheDocument();
+  });
+
+  it("'Add all' merges found boxes into the same redactions state hand-drawn boxes use, and Apply sends them", async () => {
+    const user = userEvent.setup();
+    redactPdf.mockResolvedValue(new Blob(["x"]));
+    findTextMatches.mockResolvedValue({
+      totalMatches: 2,
+      matchesByPage: { 1: [{ x: 0, y: 0, width: 10, height: 10 }, { x: 20, y: 0, width: 10, height: 10 }] },
+      skippedByPage: {},
+      noTextLayerPages: [],
+    });
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(1));
+    await screen.findByAltText(/page 1/i);
+
+    await user.type(screen.getByLabelText(/find text to redact/i), "Acme");
+    await user.click(screen.getByRole("button", { name: /^find$/i }));
+    await user.click(await screen.findByRole("button", { name: /add all 2 as redaction boxes/i }));
+
+    expect(screen.getByRole("button", { name: /apply redactions/i })).toBeEnabled();
+    expect(screen.getByText(/2 boxes across 1 page will be redacted/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /apply redactions/i }));
+    await waitFor(() => expect(redactPdf).toHaveBeenCalled());
+    const [, redactions] = redactPdf.mock.calls[0];
+    expect(redactions[1]).toHaveLength(2);
+  });
+
+  it("adding found boxes on top of an existing hand-drawn box keeps both, rather than overwriting", async () => {
+    const user = userEvent.setup();
+    findTextMatches.mockResolvedValue({
+      totalMatches: 1,
+      matchesByPage: { 1: [{ x: 0, y: 0, width: 10, height: 10 }] },
+      skippedByPage: {},
+      noTextLayerPages: [],
+    });
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(1));
+    const img = await screen.findByAltText(/page 1/i);
+    stubAndDrag(img);
+    await waitFor(() => expect(screen.getByText(/1 box across 1 page will be redacted/i)).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText(/find text to redact/i), "Acme");
+    await user.click(screen.getByRole("button", { name: /^find$/i }));
+    await user.click(await screen.findByRole("button", { name: /add all 1 as redaction box$/i }));
+
+    expect(screen.getByText(/2 boxes across 1 page will be redacted/i)).toBeInTheDocument();
+  });
+
+  it("surfaces skipped (line-crossing) matches and no-text-layer pages honestly, rather than hiding them", async () => {
+    const user = userEvent.setup();
+    findTextMatches.mockResolvedValue({
+      totalMatches: 1,
+      matchesByPage: { 1: [{ x: 0, y: 0, width: 10, height: 10 }] },
+      skippedByPage: { 1: 1 },
+      noTextLayerPages: [2],
+    });
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(2));
+    await screen.findByAltText(/page 1/i);
+
+    await user.type(screen.getByLabelText(/find text to redact/i), "Acme");
+    await user.click(screen.getByRole("button", { name: /^find$/i }));
+
+    expect(await screen.findByText(/1 match skipped.*span.*line break/i)).toBeInTheDocument();
+    expect(screen.getByText(/no text layer on page 2.*likely scanned/i)).toBeInTheDocument();
+  });
+
+  it("reports zero matches without offering an Add-all button", async () => {
+    const user = userEvent.setup();
+    findTextMatches.mockResolvedValue({
+      totalMatches: 0,
+      matchesByPage: {},
+      skippedByPage: {},
+      noTextLayerPages: [],
+    });
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(1));
+    await screen.findByAltText(/page 1/i);
+
+    await user.type(screen.getByLabelText(/find text to redact/i), "nope");
+    await user.click(screen.getByRole("button", { name: /^find$/i }));
+
+    expect(await screen.findByText(/no matches found for "nope"/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add all/i })).not.toBeInTheDocument();
+  });
+
+  it("still toasts when findTextMatches rejects (P0-5-style non-Error tolerance)", async () => {
+    const user = userEvent.setup();
+    findTextMatches.mockRejectedValue("boom");
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(1));
+    await screen.findByAltText(/page 1/i);
+
+    await user.type(screen.getByLabelText(/find text to redact/i), "Acme");
+    await user.click(screen.getByRole("button", { name: /^find$/i }));
+
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+    );
+  });
+
+  it("clears the previous find result when a new file is chosen", async () => {
+    const user = userEvent.setup();
+    findTextMatches.mockResolvedValue({
+      totalMatches: 1,
+      matchesByPage: { 1: [{ x: 0, y: 0, width: 10, height: 10 }] },
+      skippedByPage: {},
+      noTextLayerPages: [],
+    });
+    render(<RedactTool />);
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(1));
+    await screen.findByAltText(/page 1/i);
+    await user.type(screen.getByLabelText(/find text to redact/i), "Acme");
+    await user.click(screen.getByRole("button", { name: /^find$/i }));
+    await screen.findByText(/found 1 match/i);
+
+    await upload(screen.getByLabelText(/pdf file/i), await makePdfFile(1));
+    await waitFor(() => expect(screen.queryByText(/found 1 match/i)).not.toBeInTheDocument());
   });
 });

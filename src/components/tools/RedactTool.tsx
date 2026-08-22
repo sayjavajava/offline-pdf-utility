@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { redactPdf, parsePageRange, type RedactionRect } from '@/lib/pdf-utils';
 import { renderPdfPages, getPageSizes, type PageSize } from '@/lib/pdf-render';
+import { findTextMatches, type MatchResult } from '@/lib/pdf-search';
 import { derivedName, downloadBlob, reportToolError } from '@/lib/download';
 import { assertPdfFile, largeFileWarning } from '@/lib/file-validation';
 import { FilePicker } from '@/components/FilePicker';
@@ -27,6 +28,11 @@ export const RedactTool = () => {
   const [drag, setDrag] = useState<{ start: PixelPoint; current: PixelPoint } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [applyRange, setApplyRange] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [findProgress, setFindProgress] = useState<{ done: number; total: number } | null>(null);
+  const [findResult, setFindResult] = useState<MatchResult | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const { toast } = useToast();
   const file = files[0] ?? null;
@@ -237,6 +243,61 @@ export const RedactTool = () => {
     }
   };
 
+  /**
+   * Finds every occurrence of `searchQuery` across the whole document (F-24)
+   * — not just the current page, since the actual gap this closes is
+   * redacting something (a name, a case number) that recurs throughout a
+   * long document without dragging a box over each occurrence by hand.
+   * Nothing is applied here; results are reviewed and added explicitly via
+   * handleAddAllMatches below, same "review before anything destructive
+   * happens" shape the rest of this tool already has.
+   */
+  const handleFind = async () => {
+    if (!file) {
+      toast({ title: 'No file selected', description: 'Please select a PDF file.', variant: 'destructive' });
+      return;
+    }
+    setSearching(true);
+    setFindResult(null);
+    setFindProgress(null);
+    try {
+      const result = await findTextMatches(file, searchQuery, {
+        caseSensitive,
+        password,
+        onProgress: (done, total) => setFindProgress({ done, total }),
+      });
+      setFindResult(result);
+    } catch (error) {
+      reportToolError(toast, 'Error searching PDF', error);
+    } finally {
+      setSearching(false);
+      setFindProgress(null);
+    }
+  };
+
+  const handleAddAllMatches = () => {
+    if (!findResult) return;
+    setRedactions((prev) => {
+      const next = { ...prev };
+      for (const [pageStr, rects] of Object.entries(findResult.matchesByPage)) {
+        const page = Number(pageStr);
+        next[page] = [...(next[page] ?? []), ...rects];
+      }
+      return next;
+    });
+    toast({
+      title: 'Added',
+      description:
+        `Added ${findResult.totalMatches} match${findResult.totalMatches === 1 ? '' : 'es'} as ` +
+        `redaction box${findResult.totalMatches === 1 ? '' : 'es'}.`,
+    });
+    setFindResult(null);
+  };
+
+  const totalSkipped = findResult
+    ? Object.values(findResult.skippedByPage).reduce((sum, n) => sum + n, 0)
+    : 0;
+
   const handleApply = async () => {
     if (!file) {
       toast({ title: 'No file selected', description: 'Please select a PDF file.', variant: 'destructive' });
@@ -265,7 +326,9 @@ export const RedactTool = () => {
         Draw boxes over content to permanently remove — this deletes the underlying text and image
         data, not just draws over it, so nothing under a box stays selectable, copyable, or
         searchable. Every page you redact loses its own text layer entirely, since it is rebuilt as
-        a plain image; pages you leave untouched keep theirs.
+        a plain image; pages you leave untouched keep theirs. Or search for text below to find every
+        occurrence across the document and turn them into boxes automatically — review them like any
+        other box before applying.
       </p>
       <FilePicker
         files={files}
@@ -274,6 +337,8 @@ export const RedactTool = () => {
           setRedactions({});
           setPageIndex(0);
           setApplyRange('');
+          setSearchQuery('');
+          setFindResult(null);
           if (next[0]) {
             const warning = largeFileWarning(next[0]);
             if (warning) toast({ title: 'Large file', description: warning });
@@ -294,6 +359,68 @@ export const RedactTool = () => {
           onChange={(e) => setPassword(e.target.value)}
         />
       </div>
+
+      {file && (
+        <div className="border border-glass-border rounded p-3 space-y-2">
+          <Label htmlFor="find-query">Find text to redact</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              id="find-query"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="e.g. a name or account number"
+              className="w-64"
+            />
+            <div className="flex items-center gap-2">
+              <input
+                id="find-case-sensitive"
+                type="checkbox"
+                checked={caseSensitive}
+                onChange={(e) => setCaseSensitive(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="find-case-sensitive" className="mb-0">Match case</Label>
+            </div>
+            <Button type="button" variant="outline" onClick={handleFind} disabled={searching}>
+              {searching ? 'Searching…' : 'Find'}
+            </Button>
+          </div>
+          {findProgress && (
+            <p className="text-sm text-muted-foreground" role="status">
+              Searching page {findProgress.done} of {findProgress.total}…
+            </p>
+          )}
+          {findResult && (
+            <div className="text-sm space-y-1">
+              <p>
+                {findResult.totalMatches === 0
+                  ? `No matches found for "${searchQuery}".`
+                  : `Found ${findResult.totalMatches} match${findResult.totalMatches === 1 ? '' : 'es'} ` +
+                    `across ${Object.keys(findResult.matchesByPage).length} ` +
+                    `page${Object.keys(findResult.matchesByPage).length === 1 ? '' : 's'}.`}
+              </p>
+              {totalSkipped > 0 && (
+                <p className="text-muted-foreground">
+                  {totalSkipped} match{totalSkipped === 1 ? '' : 'es'} skipped — {totalSkipped === 1 ? 'it spans' : 'they span'} a
+                  line break, so draw {totalSkipped === 1 ? 'that one' : 'those'} by hand.
+                </p>
+              )}
+              {findResult.noTextLayerPages.length > 0 && (
+                <p className="text-muted-foreground">
+                  No text layer on page{findResult.noTextLayerPages.length === 1 ? '' : 's'}{' '}
+                  {findResult.noTextLayerPages.join(', ')} — likely scanned; redact{' '}
+                  {findResult.noTextLayerPages.length === 1 ? 'that one' : 'those'} manually.
+                </p>
+              )}
+              {findResult.totalMatches > 0 && (
+                <Button type="button" variant="outline" size="sm" onClick={handleAddAllMatches}>
+                  Add all {findResult.totalMatches} as redaction box{findResult.totalMatches === 1 ? '' : 'es'}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {previewing && <p className="text-sm text-muted-foreground">Rendering page…</p>}
 

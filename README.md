@@ -46,7 +46,8 @@ An **AI-coded**, completely offline PDF toolkit built with React and TypeScript,
   proportionally to fit.
 - **Redact PDF**: Draw boxes over content to permanently delete it — the underlying text and
   image data is removed, not just painted over, so nothing under a box stays selectable,
-  copyable, or searchable.
+  copyable, or searchable. Or search for text to find every occurrence across the document and
+  turn them into boxes automatically, reviewed before anything is applied.
 - **Compare PDFs**: Find what changed between two versions of a document, page by page — both
   whether the text differs and whether the page looks different. Read-only: produces a report,
   not a new PDF.
