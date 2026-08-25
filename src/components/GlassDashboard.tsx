@@ -181,7 +181,7 @@ export const GlassDashboard = () => {
       <div className="container mx-auto px-6 py-16 relative z-10">
         {/* Hero section with glassmorphism */}
         <div className="text-center mb-20 animate-scale-in">
-          <div className="inline-flex items-center space-x-2 bg-glass-bg backdrop-blur-sm border border-glass-border rounded-full px-4 py-2 mb-6">
+          <div className="inline-flex items-center space-x-2 bg-glass-bg backdrop-blur-xs border border-glass-border rounded-full px-4 py-2 mb-6">
             <Sparkles className="h-4 w-4 text-primary-soft" />
             <span className="text-sm font-medium text-muted-foreground">Professional PDF Tools</span>
           </div>
@@ -244,7 +244,7 @@ export const GlassDashboard = () => {
                       "rounded-xl px-5 py-3 text-sm font-medium transition-all duration-200 border " +
                       (isActive
                         ? "bg-gradient-warm text-background border-transparent font-semibold"
-                        : "bg-glass-bg/10 backdrop-blur-sm border-glass-border text-muted-foreground hover:text-foreground hover:border-glass-border/80")
+                        : "bg-glass-bg/10 backdrop-blur-xs border-glass-border text-muted-foreground hover:text-foreground hover:border-glass-border/80")
                     }
                   >
                     {category}
@@ -270,10 +270,10 @@ export const GlassDashboard = () => {
 
         {/* Security badge */}
         <div className="text-center">
-          <div className="inline-flex items-center space-x-3 bg-glass-bg backdrop-blur-sm border border-glass-border rounded-2xl px-6 py-4 shadow-glass">
+          <div className="inline-flex items-center space-x-3 bg-glass-bg backdrop-blur-xs border border-glass-border rounded-2xl px-6 py-4 shadow-glass">
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-warm rounded-lg blur-sm opacity-40"></div>
-              <div className="relative rounded-lg bg-glass-bg backdrop-blur-sm border border-glass-border p-2">
+              <div className="absolute inset-0 bg-gradient-warm rounded-lg blur-xs opacity-40"></div>
+              <div className="relative rounded-lg bg-glass-bg backdrop-blur-xs border border-glass-border p-2">
                 <Shield className="h-5 w-5 text-primary" />
               </div>
             </div>
