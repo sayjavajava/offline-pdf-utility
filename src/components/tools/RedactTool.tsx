@@ -23,6 +23,11 @@ export const RedactTool = () => {
   const [pageSizes, setPageSizes] = useState<PageSize[] | null>(null);
   const [pageIndex, setPageIndex] = useState(0); // 0-based
   const [preview, setPreview] = useState<{ url: string; heightPts: number } | null>(null);
+  // The rendered <img>'s intrinsic size, once it's actually loaded — kept in
+  // state (set via onLoad below) rather than read from imgRef.current during
+  // render, since accessing a ref's value while rendering is unreliable
+  // (react-hooks/refs) and this app's own eslint config now enforces it.
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [redactions, setRedactions] = useState<Record<number, RedactionRect[]>>({});
   const [drag, setDrag] = useState<{ start: PixelPoint; current: PixelPoint } | null>(null);
@@ -42,7 +47,15 @@ export const RedactTool = () => {
   // Render the current page whenever the file, page, or password changes.
   useEffect(() => {
     if (!file) {
+      // Clearing stale preview/size state when the selected file goes away
+      // (rather than an effect deriving state purely from a changed prop,
+      // which react-hooks/set-state-in-effect exists to steer away from) —
+      // the rest of this same effect does real async fetching for the
+      // non-null case below, so this reset belongs here with it rather than
+      // split into a separate render-time comparison for one branch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(null);
+      setNaturalSize(null);
       setPageSizes(null);
       return;
     }
@@ -60,9 +73,13 @@ export const RedactTool = () => {
         if (cancelled) return;
         url = URL.createObjectURL(new Blob([rendered.bytes], { type: 'image/png' }));
         setPreview({ url, heightPts: rendered.height / PREVIEW_SCALE });
+        setNaturalSize(null); // new image, not loaded yet — set again by onLoad below
       } catch (error) {
         console.error('Page preview failed:', error);
-        if (!cancelled) setPreview(null);
+        if (!cancelled) {
+          setPreview(null);
+          setNaturalSize(null);
+        }
       } finally {
         if (!cancelled) setPreviewing(false);
       }
@@ -462,6 +479,7 @@ export const RedactTool = () => {
               onMouseMove={handleMouseMove}
               onMouseUp={finishDrag}
               onMouseLeave={finishDrag}
+              onLoad={(e) => setNaturalSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
               draggable={false}
             />
             <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none">
@@ -475,10 +493,10 @@ export const RedactTool = () => {
                 return (
                   <rect
                     key={i}
-                    x={`${(px.x / (imgRef.current?.naturalWidth || 1)) * 100}%`}
-                    y={`${(px.y / (imgRef.current?.naturalHeight || 1)) * 100}%`}
-                    width={`${(px.width / (imgRef.current?.naturalWidth || 1)) * 100}%`}
-                    height={`${(px.height / (imgRef.current?.naturalHeight || 1)) * 100}%`}
+                    x={`${(px.x / (naturalSize?.width || 1)) * 100}%`}
+                    y={`${(px.y / (naturalSize?.height || 1)) * 100}%`}
+                    width={`${(px.width / (naturalSize?.width || 1)) * 100}%`}
+                    height={`${(px.height / (naturalSize?.height || 1)) * 100}%`}
                     fill="rgba(220, 38, 38, 0.5)"
                     stroke="rgb(220, 38, 38)"
                   />
@@ -486,10 +504,10 @@ export const RedactTool = () => {
               })}
               {drag && preview && (
                 <rect
-                  x={`${(Math.min(drag.start.x, drag.current.x) / (imgRef.current?.naturalWidth || 1)) * 100}%`}
-                  y={`${(Math.min(drag.start.y, drag.current.y) / (imgRef.current?.naturalHeight || 1)) * 100}%`}
-                  width={`${(Math.abs(drag.current.x - drag.start.x) / (imgRef.current?.naturalWidth || 1)) * 100}%`}
-                  height={`${(Math.abs(drag.current.y - drag.start.y) / (imgRef.current?.naturalHeight || 1)) * 100}%`}
+                  x={`${(Math.min(drag.start.x, drag.current.x) / (naturalSize?.width || 1)) * 100}%`}
+                  y={`${(Math.min(drag.start.y, drag.current.y) / (naturalSize?.height || 1)) * 100}%`}
+                  width={`${(Math.abs(drag.current.x - drag.start.x) / (naturalSize?.width || 1)) * 100}%`}
+                  height={`${(Math.abs(drag.current.y - drag.start.y) / (naturalSize?.height || 1)) * 100}%`}
                   fill="rgba(220, 38, 38, 0.3)"
                   stroke="rgb(220, 38, 38)"
                   strokeDasharray="4"
