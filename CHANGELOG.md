@@ -26,6 +26,11 @@ isn't optional bookkeeping — it's what the release notes are made of.
 
 ### Added
 
+- **Fill PDF Forms**: fill in a PDF's text fields, checkboxes, dropdowns, and
+  radio buttons, then download the result — either flattened (looks the
+  same in every reader, fields locked) or left editable. Fields this tool
+  can't edit (buttons, option lists, signature fields) are listed rather
+  than silently skipped.
 - **Convert to PDF**: select several JPEG/PNG images at once to combine them
   into one multi-page PDF, in the order shown, instead of converting each one
   separately and merging them afterward.

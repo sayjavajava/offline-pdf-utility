@@ -17,6 +17,7 @@ import {
   Crop,
   Eraser,
   GitCompare,
+  ClipboardList,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
 import { Button } from "@/components/ui/button";
@@ -37,9 +38,10 @@ import { CompressTool } from './tools/CompressTool';
 import { CropResizeTool } from './tools/CropResizeTool';
 import { RedactTool } from './tools/RedactTool';
 import { CompareTool } from './tools/CompareTool';
+import { FillFormTool } from './tools/FillFormTool';
 
 /**
- * Grouping the 16 tools by category (F-23) — reduces the dashboard to a
+ * Grouping the tools by category (F-23) — reduces the dashboard to a
  * handful of cards per screen instead of one long scroll, without changing
  * any card's own look. Order here is also tab order.
  */
@@ -166,6 +168,13 @@ const pdfTools: { id: string; title: string; description: string; icon: typeof S
     icon: FileArchive,
     category: "Edit & Enhance",
   },
+  {
+    id: "fillforms",
+    title: "Fill PDF Forms",
+    description: "Fill in text fields, checkboxes, dropdowns, and radio buttons, then download the result.",
+    icon: ClipboardList,
+    category: "Edit & Enhance",
+  },
 ];
 
 export const GlassDashboard = () => {
@@ -227,6 +236,7 @@ export const GlassDashboard = () => {
             {activeTool === 'compress' && <CompressTool />}
             {activeTool === 'cropresize' && <CropResizeTool />}
             {activeTool === 'redact' && <RedactTool />}
+            {activeTool === 'fillforms' && <FillFormTool />}
           </div>
         ) : (
           <div className="max-w-7xl mx-auto mb-16">
