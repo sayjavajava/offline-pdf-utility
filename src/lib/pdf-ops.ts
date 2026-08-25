@@ -4,6 +4,7 @@
 import { PDFDocument, PDFRawStream, PDFInvalidObject, PDFName, degrees } from '@cantoo/pdf-lib';
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
 import { encryptPdfBytes, encryptPdfBytesWithPermissions, compressPdfBytes, type PdfPermissions } from './qpdf-engine';
+import { placeSignatureImage, type SignaturePlacement, type SignatureImageFormat } from './pdf-signature';
 
 /**
  * Strips leftover cross-reference-stream objects from a loaded document
@@ -461,6 +462,26 @@ export async function editPdfMetadata(
     if (metadata.producer) pdfDoc.setProducer(metadata.producer);
     if (metadata.creator) pdfDoc.setCreator(metadata.creator);
 
+    const pdfBytes = await pdfDoc.save();
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+export type { SignaturePlacement, SignatureImageFormat } from './pdf-signature';
+
+/**
+ * Places a signature image (drawn, typed, or uploaded — the UI normalizes
+ * all three to PNG/JPEG bytes before calling this) onto one page of a PDF
+ * (F-26).
+ */
+export async function addSignature(
+    file: File,
+    imageBytes: Uint8Array,
+    imageFormat: SignatureImageFormat,
+    placement: SignaturePlacement,
+    password?: string,
+): Promise<Blob> {
+    const pdfDoc = await loadPdf(file, password);
+    await placeSignatureImage(pdfDoc, imageBytes, imageFormat, placement);
     const pdfBytes = await pdfDoc.save();
     return new Blob([pdfBytes], { type: 'application/pdf' });
 }

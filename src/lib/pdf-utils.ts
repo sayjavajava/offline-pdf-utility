@@ -26,6 +26,8 @@ export type {
   PdfPermissions,
   CropMargins,
   PaperSize,
+  SignaturePlacement,
+  SignatureImageFormat,
 } from './pdf-ops';
 export type { ExtractedImage, ExtractImagesResult } from './image-extract';
 export type { RedactionRect } from './pdf-redact';
@@ -84,6 +86,7 @@ export const addPageNumbers = (...a: Parameters<typeof ops.addPageNumbers>) =>
 export const extractImages = (...a: Parameters<typeof ops.extractImages>) => run('extractImages', a);
 export const cropPdf = (...a: Parameters<typeof ops.cropPdf>) => run('cropPdf', a);
 export const resizePdf = (...a: Parameters<typeof ops.resizePdf>) => run('resizePdf', a);
+export const addSignature = (...a: Parameters<typeof ops.addSignature>) => run('addSignature', a);
 
 /**
  * DOCX conversion stays on the main thread: docx-layout.ts's HTML parsing
