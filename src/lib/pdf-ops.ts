@@ -108,10 +108,10 @@ export async function loadPdf(file: File, password?: string): Promise<PDFDocumen
         const wrongPassword = /password incorrect/i.test(message);
 
         if (needsPassword || (wrongPassword && supplied === '')) {
-            throw new Error('This PDF is password protected. Enter its password to continue.');
+            throw new Error('This PDF is password protected. Enter its password to continue.', { cause: error });
         }
         if (wrongPassword) {
-            throw new Error('Incorrect password for this PDF.');
+            throw new Error('Incorrect password for this PDF.', { cause: error });
         }
         throw error;
     }
@@ -529,7 +529,7 @@ export async function convertImageToPdf(files: File[]): Promise<Blob> {
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`"${file.name}": ${message}`);
+            throw new Error(`"${file.name}": ${message}`, { cause: error });
         }
 
         const page = pdfDoc.addPage([image.width, image.height]);
