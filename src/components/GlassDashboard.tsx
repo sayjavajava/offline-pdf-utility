@@ -17,6 +17,7 @@ import {
   Crop,
   Eraser,
   GitCompare,
+  Signature,
   ClipboardList,
 } from "lucide-react";
 import { GlassPDFCard } from "./GlassPDFCard";
@@ -38,6 +39,7 @@ import { CompressTool } from './tools/CompressTool';
 import { CropResizeTool } from './tools/CropResizeTool';
 import { RedactTool } from './tools/RedactTool';
 import { CompareTool } from './tools/CompareTool';
+import { SignatureTool } from './tools/SignatureTool';
 import { FillFormTool } from './tools/FillFormTool';
 
 /**
@@ -169,6 +171,13 @@ const pdfTools: { id: string; title: string; description: string; icon: typeof S
     category: "Edit & Enhance",
   },
   {
+    id: "signature",
+    title: "Add Signature",
+    description: "Type, draw, or upload a signature and place it on a page.",
+    icon: Signature,
+    category: "Edit & Enhance",
+  },
+  {
     id: "fillforms",
     title: "Fill PDF Forms",
     description: "Fill in text fields, checkboxes, dropdowns, and radio buttons, then download the result.",
@@ -236,6 +245,7 @@ export const GlassDashboard = () => {
             {activeTool === 'compress' && <CompressTool />}
             {activeTool === 'cropresize' && <CropResizeTool />}
             {activeTool === 'redact' && <RedactTool />}
+            {activeTool === 'signature' && <SignatureTool />}
             {activeTool === 'fillforms' && <FillFormTool />}
           </div>
         ) : (

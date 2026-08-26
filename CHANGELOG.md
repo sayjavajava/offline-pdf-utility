@@ -26,6 +26,10 @@ isn't optional bookkeeping — it's what the release notes are made of.
 
 ### Added
 
+- **Add Signature**: stamp a visual signature — typed (rendered in a script
+  font), drawn freehand, or an uploaded image — onto a page, positioned by
+  clicking and dragging on a page preview. A visual mark, not a
+  cryptographic digital signature (no key, no trust chain).
 - **Fill PDF Forms**: fill in a PDF's text fields, checkboxes, dropdowns, and
   radio buttons, then download the result — either flattened (looks the
   same in every reader, fields locked) or left editable. Fields this tool

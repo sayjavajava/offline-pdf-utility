@@ -26,6 +26,8 @@ export type {
   PdfPermissions,
   CropMargins,
   PaperSize,
+  SignaturePlacement,
+  SignatureImageFormat,
   FormFieldsResult,
   FormFieldInfo,
   FormFieldType,
@@ -88,6 +90,7 @@ export const addPageNumbers = (...a: Parameters<typeof ops.addPageNumbers>) =>
 export const extractImages = (...a: Parameters<typeof ops.extractImages>) => run('extractImages', a);
 export const cropPdf = (...a: Parameters<typeof ops.cropPdf>) => run('cropPdf', a);
 export const resizePdf = (...a: Parameters<typeof ops.resizePdf>) => run('resizePdf', a);
+export const addSignature = (...a: Parameters<typeof ops.addSignature>) => run('addSignature', a);
 export const getFormFields = (...a: Parameters<typeof ops.getFormFields>) => run('getFormFields', a);
 export const fillFormFields = (...a: Parameters<typeof ops.fillFormFields>) => run('fillFormFields', a);
 
