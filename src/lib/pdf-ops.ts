@@ -5,6 +5,7 @@ import { PDFDocument, PDFRawStream, PDFInvalidObject, PDFName, degrees } from '@
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
 import { encryptPdfBytes, encryptPdfBytesWithPermissions, compressPdfBytes, type PdfPermissions } from './qpdf-engine';
 import { placeSignatureImage, type SignaturePlacement, type SignatureImageFormat } from './pdf-signature';
+import { readFormFields, applyFormFieldValues, type FormFieldsResult, type FormFieldValues } from './pdf-forms';
 
 /**
  * Strips leftover cross-reference-stream objects from a loaded document
@@ -482,6 +483,47 @@ export async function addSignature(
 ): Promise<Blob> {
     const pdfDoc = await loadPdf(file, password);
     await placeSignatureImage(pdfDoc, imageBytes, imageFormat, placement);
+    const pdfBytes = await pdfDoc.save();
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+export type { FormFieldsResult, FormFieldInfo, FormFieldType, FormFieldValues } from './pdf-forms';
+
+/**
+ * Inspect a PDF's AcroForm fields (F-25) — read-only, no save. Returns an
+ * empty `fields` array (and empty `unsupportedFields`) for a PDF with no
+ * form at all, same as `getForm()` does: it's honest that there's nothing
+ * to fill, not an error.
+ */
+export async function getFormFields(file: File, password?: string): Promise<FormFieldsResult> {
+    const pdfDoc = await loadPdf(file, password);
+    return readFormFields(pdfDoc.getForm());
+}
+
+/**
+ * Fill a PDF's AcroForm fields with the given values (F-25), keyed by each
+ * field's fully-qualified name (as returned by `getFormFields`). Values for
+ * a field name that no longer exists, or of the wrong JS type for that
+ * field's kind, are silently skipped by `applyFormFieldValues` — the same
+ * "match by name, ignore what doesn't apply" the codebase already uses for
+ * `redactions` keyed by page number.
+ *
+ * `flatten: true` bakes the filled appearances into each page's own content
+ * stream and removes the form fields (`PDFForm.flatten()`) — the same
+ * "commit to pixels once you're done editing" tradeoff Redact PDF makes for
+ * its boxes, useful here so the result looks identical in every PDF reader
+ * rather than depending on that reader's own form-rendering.
+ */
+export async function fillFormFields(
+    file: File,
+    values: FormFieldValues,
+    options: { flatten?: boolean; password?: string } = {},
+): Promise<Blob> {
+    const pdfDoc = await loadPdf(file, options.password);
+    const form = pdfDoc.getForm();
+    applyFormFieldValues(form, values);
+    if (options.flatten) form.flatten();
+
     const pdfBytes = await pdfDoc.save();
     return new Blob([pdfBytes], { type: 'application/pdf' });
 }
