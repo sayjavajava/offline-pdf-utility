@@ -64,7 +64,7 @@
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.5",
-    "globals": "^15.15.0",
+    "globals": "^17.11.0",
     "jsdom": "^30.0.1",
     "lovable-tagger": "^1.1.9",
     "playwright": "^1.62.1",
