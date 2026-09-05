@@ -1,7 +1,7 @@
 {
   "name": "offline-pdf-utility",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A completely offline PDF toolkit that runs entirely in your browser.",
   "license": "GPL-3.0-or-later",
   "repository": {

@@ -14,6 +14,8 @@ isn't optional bookkeeping — it's what the release notes are made of.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-05
+
 ### Changed
 
 - The project now has a name: **OffGridPDF**. The downloadable file is
