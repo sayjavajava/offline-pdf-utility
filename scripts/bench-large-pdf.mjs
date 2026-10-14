@@ -119,8 +119,11 @@ async function timed(label, fn) {
   if (SUBSET && !SUBSET.split(",").some((s) => label.includes(s))) return;
   const start = Date.now();
   try {
-    const extra = await fn();
-    const ms = Date.now() - start;
+    let extra = await fn();
+    let ms = Date.now() - start;
+    // A benchmark can time just the phase it is about (the search, not the
+    // file load before it) by returning { ms, note }.
+    if (extra && typeof extra === "object") ({ ms, note: extra } = extra);
     results.push({ label, ms, ok: true });
     console.log(`  ✓ ${label}: ${ms}ms${extra ? "  (" + extra + ")" : ""}`);
   } catch (err) {
@@ -238,6 +241,79 @@ await timed("Compare PDFs (same file vs itself, full page-by-page diff)", async 
   await page.waitForTimeout(200);
   await page.getByRole("button", { name: /^compare$/i }).click();
   await page.waitForSelector(`text=/Page ${PAGES}:/`, { timeout: 300000 });
+});
+
+// F-24: Find & Redact searches every page's text. Timed from clicking Find
+// to the result appearing (the page-size scan on file select is measured
+// separately above), for a term on one page and a term on every page, since
+// matched pages also pay for TextLayer layout.
+for (const [label, query] of [
+  ["Find & Redact — search, term on 1 page", `Document page ${Math.ceil(PAGES / 2)} of`],
+  ["Find & Redact — search, term on every page", "Document page"],
+]) {
+  await timed(label, async () => {
+    await openTool("Security", "Redact PDF");
+    await page.locator("input[type=file]").setInputFiles(bigPdfPath);
+    await page.waitForSelector(`text=/Page 1 of ${PAGES}/`, { timeout: 180000 });
+    await page.locator("input#find-query").fill(query);
+    const start = Date.now();
+    await page.getByRole("button", { name: "Find", exact: true }).click();
+    const summary = page.locator("text=/^(Found \\d+ match|No matches found)/");
+    await summary.waitFor({ timeout: 300000 });
+    return { ms: Date.now() - start, note: await summary.textContent() };
+  });
+}
+
+// F-26: Add Signature loads the whole document to stamp one page, then saves
+// all of it. Timed from clicking Add Signature to the download.
+await timed("Add Signature (typed, page 1)", async () => {
+  await openTool("Edit & Enhance", "Add Signature");
+  await page.locator('input[type=file][accept=".pdf"]').setInputFiles(bigPdfPath);
+  await page.locator("input#typed-name").fill("Bench Signer");
+  await page.getByRole("button", { name: /use this signature/i }).click();
+  const preview = page.getByAltText("Page 1");
+  await preview.waitFor({ timeout: 120000 });
+  await page.waitForFunction(() => document.querySelector('img[alt="Page 1"]')?.naturalWidth > 0);
+  await preview.evaluate((el) => el.scrollIntoView({ block: "start" }));
+  const box = await preview.boundingBox();
+  await page.mouse.move(box.x + 40, box.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 200, box.y + 100, { steps: 5 });
+  await page.mouse.up();
+  const start = Date.now();
+  const bytes = await clickAndDownload(/add signature & download/i);
+  return { ms: Date.now() - start, note: `${(bytes / (1024 * 1024)).toFixed(1)} MB out` };
+});
+
+// F-25: Fill PDF Forms on the same document with one text field per page —
+// a form far larger than most real ones, so the cost of listing every field
+// as a control shows up. Two phases: reading the fields, then filling and
+// saving.
+const formPdf = await PDFDocument.load(pdfBytes);
+const formPages = formPdf.getPages();
+formPages.forEach((p, i) =>
+  formPdf.getForm().createTextField(`page${i + 1}.notes`).addToPage(p, { x: 400, y: 740, width: 150, height: 18 }),
+);
+const formPdfPath = join(dir, "big-form.pdf");
+writeFileSync(formPdfPath, Buffer.from(await formPdf.save()));
+
+let formLoaded = false;
+await timed(`Fill Forms — read ${formPages.length} fields`, async () => {
+  await openTool("Edit & Enhance", "Fill PDF Forms");
+  await page.locator("input[type=file]").setInputFiles(formPdfPath);
+  const start = Date.now();
+  await page.getByRole("button", { name: /load form fields/i }).click();
+  await page.locator(`#field-page${formPages.length}\\.notes`).waitFor({ timeout: 300000 });
+  formLoaded = true;
+  return { ms: Date.now() - start, note: `${await page.locator("input[id^=field-]").count()} inputs rendered` };
+});
+
+await timed(`Fill Forms — fill & download (${formPages.length} fields, flattened)`, async () => {
+  if (!formLoaded) throw new Error("depends on the read step above");
+  await page.locator("#field-page1\\.notes").fill("Filled by the benchmark");
+  const start = Date.now();
+  const bytes = await clickAndDownload(/fill & download/i, 300000);
+  return { ms: Date.now() - start, note: `${(bytes / (1024 * 1024)).toFixed(1)} MB out` };
 });
 
 await browser.close();

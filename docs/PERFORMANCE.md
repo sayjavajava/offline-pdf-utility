@@ -25,7 +25,7 @@ image would be).
 | Realistic | 400 | 5.8 MB | image every 20th page |
 | Heavy (scanned-contracts style) | 800 | 74.6 MB | image every 5th page |
 
-## Results — all 16 tools, realistic tier (400 pages / 5.8 MB)
+## Results — all 16 tools at the time, realistic tier (400 pages / 5.8 MB)
 
 One comprehensive pass, every tool exercised end to end (file in, button clicked, download
 verified):
@@ -171,6 +171,35 @@ about the pages actually differing goes unreported. Re-verified against the real
 same resized-page fixture, with identical underlying wording, now reports "Different page size"
 with no mention of a text change.
 
+## Results — Find & Redact, Add Signature, Fill PDF Forms (F-24, F-26, F-25)
+
+These three shipped in 0.3.0 without a run recorded here, against this file's own convention. Run
+since with the same realistic tier (400 pages / 5.8 MB), driving the real built app. For Fill
+Forms the same document gets one text field per page (400 fields, far more than most real
+forms) so the cost of listing every field as a control shows up.
+
+**A different, slower machine from the tables above**: a 4-vCPU Xeon @ 2.80GHz cloud container.
+For calibration, on the same runs it took 3.9-4.2s for Compress (2.9s above) and 2.9-3.5s for Add
+Watermark (2.1s above), so roughly 1.3-1.5× slower. Each figure below is the range over 2-3 runs.
+
+| Operation | Time | Note |
+|---|---|---|
+| Find & Redact — search, term on 1 page | 1.8-2.4s | click Find → result; 1 match |
+| Find & Redact — search, term on every page | 3.7-5.1s | 400 matches, one per page |
+| Add Signature (typed, page 1) | 0.57-0.59s | click → download, 5.8 MB out |
+| Fill Forms — read 400 fields | 0.84-0.85s | click → all 400 inputs rendered |
+| Fill Forms — fill & download, flattened | 1.24-1.27s | 6.2 MB out |
+
+All five passed; nothing froze or failed. The Find timings exclude the page-size scan Redact runs
+when a file is selected, which is measured separately in the core suite.
+
+**Correction to the 0.3.0 release notes.** They say Find measured *"0.8s to search all 400 pages
+of a real-world-sized report, whether the term appears once or on every page."* That figure came
+with no recorded method and doesn't reproduce here. Even scaled for this machine's speed, the
+search is roughly 1.3-1.6s for a single match and about twice that when every page matches,
+because each matched page pays for a real text layout (see `rectsForPageMatches`). Use the
+numbers above.
+
 ## Reproduce it yourself
 
 ```bash
@@ -185,8 +214,10 @@ BENCH_IMAGES=200 BENCH_IMG_SIZE=500 npm run bench:image-batch  # 200-image heavy
 ```
 
 The core suite covers the operations most likely to regress on a future change — the six
-worker-dispatched bulk operations, both halves of PDF to Images, Redact's page-size scan, and
-Compare — rather than all 17, to keep it fast enough to actually run before a release. The full
+worker-dispatched bulk operations, both halves of PDF to Images, Redact's page-size scan, Compare,
+Find & Redact's search, Add Signature, and Fill Forms on a 400-field form — rather than every
+tool, to keep it fast enough to actually run before a release.
+`BENCH_SUBSET="Find,Signature,Fill"` runs just the last three. The full
 16-tool numbers above are a point-in-time comprehensive pass using the same methodology and
 fixture shapes, predating Compare PDFs.
 
