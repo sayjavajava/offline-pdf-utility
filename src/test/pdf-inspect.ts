@@ -43,3 +43,16 @@ export async function stampPositions(blob: Blob): Promise<[number, number][]> {
     Number(m[2]),
   ]);
 }
+
+/**
+ * Every show-text call's full text matrix `[a, b, c, d, e, f]`, rotated or
+ * not. `[a, b]` is the direction the text runs in user space (`[1, 0]` is
+ * along +x, `[0, 1]` up +y) and `[e, f]` is where its baseline starts.
+ */
+export async function textMatrices(blob: Blob): Promise<number[][]> {
+  const streams = await decompressedStreams(blob);
+  const num = "(-?[\\d.]+(?:e-?\\d+)?)";
+  return [...streams.matchAll(new RegExp(`${Array(6).fill(num).join(" ")} Tm`, "g"))].map((m) =>
+    m.slice(1, 7).map(Number),
+  );
+}

@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { addPageNumbers, formatPageNumber } from "./pdf-utils";
 import { encryptedPdfFile, FIXTURE_PASSWORD, makePdfFile, pageIndicesOf } from "@/test/fixtures";
-import { drawnText, stampPositions } from "@/test/pdf-inspect";
+import { drawnText, stampPositions, textMatrices } from "@/test/pdf-inspect";
+import { rotatedPageFile } from "@/test/rotated-page";
 
 describe("formatPageNumber", () => {
   it("renders each format", () => {
@@ -95,5 +96,38 @@ describe("addPageNumbers", () => {
     const [[, y]] = await stampPositions(blob);
     expect(y).toBeGreaterThanOrEqual(0);
     expect(y).toBeLessThanOrEqual(200 - 12); // page height for index 0, less the glyph
+  });
+
+  // Worked by hand for a 612×792pt page. Bottom-centre on the page as a reader
+  // sees it is (displayed width - label width) / 2 across, 36pt up.
+  describe("on rotated and offset pages (as displayed, not as stored)", () => {
+    const labelWidth = async (label: string, size: number) =>
+      (await (await PDFDocument.create()).embedFont("Helvetica")).widthOfTextAtSize(label, size);
+
+    it("puts bottom-centre along the bottom of a /Rotate 90 page, reading left to right", async () => {
+      const blob = await addPageNumbers(await rotatedPageFile(90), { position: "bottom-center", fontSize: 12 });
+      const [[a, b, , , e, f]] = await textMatrices(blob);
+      // Shown turned clockwise: the displayed bottom edge is user-space x = 612,
+      // and text reading rightwards on screen runs up +y in user space.
+      expect([a, b].map((n) => Math.round(n))).toEqual([0, 1]);
+      expect(e).toBeCloseTo(612 - 36, 3);
+      expect(f).toBeCloseTo((792 - (await labelWidth("1", 12))) / 2, 3);
+    });
+
+    it("keeps the number on the page when the MediaBox doesn't start at (0,0)", async () => {
+      // Used to be drawn at x = 36-ish, 100pt outside a page that starts at x = 100.
+      const blob = await addPageNumbers(await rotatedPageFile(0, [100, 100]), { position: "bottom-left", fontSize: 12 });
+      const [[a, b, , , e, f]] = await textMatrices(blob);
+      expect([a, b].map((n) => Math.round(n))).toEqual([1, 0]);
+      expect(e).toBeCloseTo(100 + 36, 3);
+      expect(f).toBeCloseTo(100 + 36, 3);
+    });
+
+    it("leaves an ordinary page exactly as before", async () => {
+      const blob = await addPageNumbers(await rotatedPageFile(0), { position: "bottom-center", fontSize: 12 });
+      const [[x, y]] = await stampPositions(blob);
+      expect(x).toBeCloseTo((612 - (await labelWidth("1", 12))) / 2, 3);
+      expect(y).toBeCloseTo(36, 3);
+    });
   });
 });

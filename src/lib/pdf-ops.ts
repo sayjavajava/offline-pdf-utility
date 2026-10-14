@@ -5,6 +5,7 @@ import { PDFDocument, PDFRawStream, PDFInvalidObject, PDFName, degrees } from '@
 import { extractImagesFromDocument, type ExtractImagesResult } from './image-extract';
 import { encryptPdfBytes, encryptPdfBytesWithPermissions, compressPdfBytes, type PdfPermissions } from './qpdf-engine';
 import { placeSignatureImage, type SignaturePlacement, type SignatureImageFormat } from './pdf-signature';
+import { displayedSize, normalizeRotation, toUserSpace, visibleBox } from './page-space';
 import { readFormFields, applyFormFieldValues, type FormFieldsResult, type FormFieldValues } from './pdf-forms';
 
 /**
@@ -654,17 +655,24 @@ export async function addWatermark(
 
     const pages = pdfDoc.getPages();
     const textWidth = helveticaFont.widthOfTextAtSize(text, options.fontSize);
-    const radians = (rotation * Math.PI) / 180;
     const common = {
         font: helveticaFont,
         size: options.fontSize,
         color: { type: 'RGB', red: options.color[0], green: options.color[1], blue: options.color[2] },
         opacity: options.opacity,
-        rotate: degrees(rotation),
     };
 
     for (const page of pages) {
-        const { width, height } = page.getSize();
+        // Laid out on the page as a reader sees it (page-space.ts): centred
+        // on the visible box rather than on a MediaBox assumed to start at
+        // (0,0), and turned by the page's own /Rotate on top of the chosen
+        // angle, so a horizontal watermark reads horizontally on a
+        // landscape scan instead of running up its side.
+        const box = visibleBox(page);
+        const pageRotation = normalizeRotation(page.getRotation().angle);
+        const { width, height } = displayedSize(box, pageRotation);
+        const angle = rotation + pageRotation;
+        const stamp = { ...common, rotate: degrees(angle) };
 
         if (options.tile) {
             // Step by the text's own footprint so stamps do not overlap, with a
@@ -673,7 +681,7 @@ export async function addWatermark(
             const stepY = options.fontSize * 4;
             for (let y = 0; y < height + stepY; y += stepY) {
                 for (let x = 0; x < width + stepX; x += stepX) {
-                    page.drawText(text, { ...common, x, y });
+                    page.drawText(text, { ...stamp, ...toUserSpace(x, y, box, pageRotation) });
                 }
             }
             continue;
@@ -682,10 +690,12 @@ export async function addWatermark(
         // drawText rotates about its own origin, so centring a rotated stamp
         // means walking back half the text's length along the rotated axis
         // rather than simply halving the page width.
+        const centre = toUserSpace(width / 2, height / 2, box, pageRotation);
+        const radians = (angle * Math.PI) / 180;
         page.drawText(text, {
-            ...common,
-            x: width / 2 - (textWidth / 2) * Math.cos(radians),
-            y: height / 2 - (textWidth / 2) * Math.sin(radians),
+            ...stamp,
+            x: centre.x - (textWidth / 2) * Math.cos(radians),
+            y: centre.y - (textWidth / 2) * Math.sin(radians),
         });
     }
 
@@ -989,7 +999,14 @@ export async function addPageNumbers(
 
     targets.forEach((pageIndex, ordinal) => {
         const page = pages[pageIndex];
-        const { width, height } = page.getSize();
+        // Positions are worked out on the page as a reader sees it, then
+        // mapped into the page's own coordinates (page-space.ts). Using
+        // getSize() directly put "bottom-centre" sideways on the left edge
+        // of a /Rotate 90 page, and off the page entirely when its box
+        // doesn't start at (0,0).
+        const box = visibleBox(page);
+        const pageRotation = normalizeRotation(page.getRotation().angle);
+        const { width, height } = displayedSize(box, pageRotation);
         const label = formatPageNumber(start + ordinal, targets.length, options);
         const labelWidth = font.widthOfTextAtSize(label, fontSize);
 
@@ -1001,10 +1018,12 @@ export async function addPageNumbers(
         // For a top stamp the margin is measured from the top edge down to the
         // baseline, so the glyph height has to come off it.
         const y = position.startsWith('top') ? height - margin - fontSize : margin;
+        const at = toUserSpace(x, y, box, pageRotation);
 
         page.drawText(label, {
-            x,
-            y,
+            x: at.x,
+            y: at.y,
+            rotate: degrees(pageRotation),
             font,
             size: fontSize,
             color: { type: 'RGB', red: color[0], green: color[1], blue: color[2] },

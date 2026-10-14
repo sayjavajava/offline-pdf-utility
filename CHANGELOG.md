@@ -30,6 +30,14 @@ isn't optional bookkeeping — it's what the release notes are made of.
   don't start at the sheet's corner, where it could end up partly off the
   page. It now lands exactly where you drag it, the right way up, on every
   page.
+- **Add Page Numbers** and **Add Watermark** had the same problem on
+  rotated pages: a "bottom-centre" page number came out sideways along the
+  left edge of a landscape scan (or upside down at the top of a page turned
+  180°), and a horizontal watermark ran up the side of the page. On pages
+  whose coordinates don't start at the sheet's corner, page numbers landed
+  entirely off the page, so a Bates-numbered file could come out with no
+  visible numbers at all. Both now place and orient their text on the page
+  as you see it. Ordinary pages come out exactly as before.
 
 ## [0.3.0] - 2026-09-05
 
