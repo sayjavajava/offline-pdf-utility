@@ -14,6 +14,17 @@ isn't optional bookkeeping — it's what the release notes are made of.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Fill PDF Forms**: a dropdown that allows several selections lost all but
+  the first one when the form was saved, even if you never touched it. Such
+  dropdowns are now listed as a field this tool doesn't edit and are left
+  exactly as they were.
+- **Fill PDF Forms**: a single rich-text field (formatted text, as some forms
+  made in Acrobat use) could stop the tool from reading *any* of the form's
+  fields. Rich-text fields are now listed as not editable here and left
+  as-is, instead of breaking the whole form or losing their formatting.
+
 ## [0.3.0] - 2026-09-05
 
 ### Changed
