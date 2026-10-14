@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
-import { readFormFields, applyFormFieldValues } from './pdf-forms';
+import { readFormFields, applyFormFieldValues, type FormFieldValues } from './pdf-forms';
 
 async function buildFormFixture() {
   const doc = await PDFDocument.create();
@@ -85,6 +85,82 @@ describe('readFormFields (F-25)', () => {
     const { fields, unsupportedFields } = readFormFields(form);
     expect(fields).toEqual([]);
     expect(unsupportedFields).toEqual(['submit']);
+  });
+
+  it('reports an empty rich-text field as unsupported instead of failing the whole read', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const form = doc.getForm();
+    const plain = form.createTextField('plain');
+    plain.addToPage(page, { x: 20, y: 140, width: 100, height: 20 });
+    const rich = form.createTextField('rich');
+    rich.addToPage(page, { x: 20, y: 100, width: 100, height: 20 });
+    rich.enableRichFormatting();
+    // Through a real save/load: that is the shape a user's file arrives in.
+    const reloaded = (await PDFDocument.load(await doc.save())).getForm();
+
+    // pdf-lib's own getText() throws RichTextFieldReadError for this field,
+    // which used to fail "Load fields" for every field in the document.
+    const { fields, unsupportedFields } = readFormFields(reloaded);
+    expect(fields.map((f) => f.name)).toEqual(['plain']);
+    expect(unsupportedFields).toEqual(['rich']);
+  });
+});
+
+/** What FillFormTool sends when the user changes nothing: every field's
+ *  value exactly as `readFormFields` reported it. */
+function untouchedValues(form: ReturnType<PDFDocument['getForm']>): FormFieldValues {
+  return Object.fromEntries(readFormFields(form).fields.map((f) => [f.name, f.value]));
+}
+
+describe('fields the tool cannot represent are left untouched', () => {
+  it('keeps every selection of a multi-select dropdown the user never touched', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const langs = doc.getForm().createDropdown('langs');
+    langs.addOptions(['en', 'fr', 'de']);
+    langs.enableMultiselect();
+    langs.select(['en', 'de']);
+    langs.addToPage(page, { x: 20, y: 100, width: 100, height: 20 });
+    const form = (await PDFDocument.load(await doc.save())).getForm();
+
+    expect(readFormFields(form).unsupportedFields).toEqual(['langs']);
+    applyFormFieldValues(form, untouchedValues(form));
+    // Used to come back as ['en']: the UI holds one value per dropdown.
+    expect(form.getDropdown('langs').getSelected()).toEqual(['en', 'de']);
+  });
+
+  it('does not rewrite a rich-text field, even if a caller passes a value for it', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const rich = doc.getForm().createTextField('rich');
+    rich.setText('styled');
+    rich.addToPage(page, { x: 20, y: 100, width: 100, height: 20 });
+    rich.enableRichFormatting();
+    const form = (await PDFDocument.load(await doc.save())).getForm();
+
+    applyFormFieldValues(form, { rich: 'replaced' });
+    expect(form.getTextField('rich').isRichFormatted()).toBe(true);
+    expect(form.getTextField('rich').getText()).toBe('styled');
+  });
+
+  it('still flattens a form that contains them', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 200]);
+    const form = doc.getForm();
+    const rich = form.createTextField('rich');
+    rich.addToPage(page, { x: 20, y: 140, width: 100, height: 20 });
+    rich.enableRichFormatting();
+    const langs = form.createDropdown('langs');
+    langs.addOptions(['en', 'de']);
+    langs.enableMultiselect();
+    langs.addToPage(page, { x: 20, y: 100, width: 100, height: 20 });
+    const reloaded = await PDFDocument.load(await doc.save());
+
+    applyFormFieldValues(reloaded.getForm(), untouchedValues(reloaded.getForm()));
+    reloaded.getForm().flatten();
+    const flattened = await PDFDocument.load(await reloaded.save());
+    expect(flattened.getForm().getFields()).toEqual([]);
   });
 });
 

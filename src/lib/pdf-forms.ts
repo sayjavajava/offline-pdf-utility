@@ -16,6 +16,14 @@
  * on, the same "disclose what we can't do" choice `ExtractTextTool` makes
  * for a scanned PDF's empty text layer and `CompareTool` makes for
  * differently-sized pages.
+ *
+ * Two variants of supported types are reported the same way, because the
+ * UI re-applies every field's value on save, touched or not:
+ * - A multi-select dropdown: the UI holds one value per dropdown, so
+ *   applying it would collapse a saved ["en", "de"] selection to "en".
+ * - A rich-text text field: pdf-lib's `getText()` throws on one with no
+ *   plain value (failing the whole read), and `setText()` strips its
+ *   formatting, so even an unchanged value would come back restyled.
  */
 import { PDFForm, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup } from '@cantoo/pdf-lib';
 
@@ -43,11 +51,11 @@ export function readFormFields(form: PDFForm): FormFieldsResult {
     const name = field.getName();
     const readOnly = field.isReadOnly();
 
-    if (field instanceof PDFTextField) {
+    if (field instanceof PDFTextField && !field.isRichFormatted()) {
       fields.push({ name, type: 'text', value: field.getText() ?? '', readOnly, maxLength: field.getMaxLength() });
     } else if (field instanceof PDFCheckBox) {
       fields.push({ name, type: 'checkbox', value: field.isChecked(), readOnly });
-    } else if (field instanceof PDFDropdown) {
+    } else if (field instanceof PDFDropdown && !field.isMultiselect()) {
       fields.push({
         name,
         type: 'dropdown',
@@ -80,12 +88,12 @@ export function applyFormFieldValues(form: PDFForm, values: FormFieldValues): vo
     if (!(name in values)) continue;
     const value = values[name];
 
-    if (field instanceof PDFTextField && typeof value === 'string') {
+    if (field instanceof PDFTextField && !field.isRichFormatted() && typeof value === 'string') {
       field.setText(value);
     } else if (field instanceof PDFCheckBox && typeof value === 'boolean') {
       if (value) field.check();
       else field.uncheck();
-    } else if (field instanceof PDFDropdown && typeof value === 'string') {
+    } else if (field instanceof PDFDropdown && !field.isMultiselect() && typeof value === 'string') {
       if (value !== '') field.select(value);
     } else if (field instanceof PDFRadioGroup && typeof value === 'string') {
       if (value !== '') field.select(value);

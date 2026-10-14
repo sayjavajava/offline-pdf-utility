@@ -115,7 +115,8 @@ export const FillFormTool = () => {
             <p className="text-sm text-muted-foreground">
               {unsupportedFields.length} field{unsupportedFields.length === 1 ? '' : 's'} in this PDF (
               {unsupportedFields.join(', ')}) {unsupportedFields.length === 1 ? 'is' : 'are'} a type this tool
-              doesn't edit (buttons, option lists, or signature fields) and will be left as-is.
+              doesn't edit (buttons, option lists, multi-select dropdowns, rich-text fields, or signature
+              fields) and will be left as-is.
             </p>
           )}
 
