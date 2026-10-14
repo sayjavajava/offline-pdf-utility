@@ -29,7 +29,7 @@ Run the same checks CI does, in this order (a failure early saves time over one 
 ```bash
 npm run typecheck
 npm run lint
-npm run test
+npm run test:coverage           # the tests, plus the coverage thresholds in vite.config.ts
 npm run build
 npm run check:offline           # dist/ is one self-contained file, nothing fetchable
 npm run check:offline:runtime   # loads the real build with the network cut, drives every tool

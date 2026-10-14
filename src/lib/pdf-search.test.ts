@@ -6,18 +6,23 @@
  * `pdf-redact.ts` splits `toPixelRect` out for) — both pulled out as pure
  * functions specifically so they can be pinned directly with plain fixture
  * data, no real PDF or DOM required. `findTextMatches`/`rectsForPageMatches`
- * reach a real `TextLayer` and DOM `Range`s, which jsdom doesn't lay out
- * with real font metrics (same split `pdf-render.test.ts`/
- * `RedactTool.test.tsx` already document) — that path is verified against
- * the real built app instead.
+ * reach a real `TextLayer` and DOM `Range`s for a page that matches, which
+ * jsdom doesn't lay out with real font metrics (same split
+ * `pdf-render.test.ts`/`RedactTool.test.tsx` already document) — that path
+ * is verified against the real built app instead. Everything else
+ * `findTextMatches` decides (what to reject, which pages to report as having
+ * no text layer, progress) is tested here against stubbed page text.
  *
  * The `item.transform` values below (`[24, 0, 0, 24, 20, 250]`, width
  * 78.696) are the real numbers measured from a throwaway rotation-test PDF
  * while planning this feature, not invented — see the module header comment
  * in pdf-search.ts for what they confirmed.
  */
-import { describe, expect, it } from "vitest";
-import { locateMatches, unionMatchRects } from "./pdf-search";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { findTextMatches, locateMatches, unionMatchRects } from "./pdf-search";
+import { getPageTextData } from "./pdf-render";
+
+vi.mock("./pdf-render", () => ({ getPageTextData: vi.fn() }));
 
 describe("locateMatches (F-24)", () => {
   it("finds a match fully inside one item", () => {
@@ -142,3 +147,49 @@ describe("unionMatchRects (F-24)", () => {
     expect(rect!.y).toBeCloseTo(300 - 10 - 1.5);
   });
 });
+
+describe("findTextMatches (F-24) — everything short of measuring a match", () => {
+  const file = new File(["%PDF"], "doc.pdf", { type: "application/pdf" });
+  const page = (pageNumber: number, strings: string[]) => ({
+    pageNumber,
+    content: { items: strings.map((str) => ({ str, hasEOL: false })) },
+    viewport: {},
+  });
+
+  beforeEach(() => {
+    vi.mocked(getPageTextData).mockReset();
+  });
+
+  it("rejects a one-character search before opening the document", async () => {
+    await expect(findTextMatches(file, "a")).rejects.toThrow(/at least 2 characters/);
+    expect(getPageTextData).not.toHaveBeenCalled();
+  });
+
+  it("reports pages with no text layer (likely scanned) instead of silently finding nothing", async () => {
+    vi.mocked(getPageTextData).mockResolvedValue([
+      page(1, ["Invoice for ACME"]),
+      page(2, []),
+      page(3, ["   ", ""]),
+    ] as never);
+    const result = await findTextMatches(file, "nothing-here");
+    expect(result).toEqual({ totalMatches: 0, matchesByPage: {}, skippedByPage: {}, noTextLayerPages: [2, 3] });
+  });
+
+  it("passes the password through and reports progress for every page, matched or not", async () => {
+    vi.mocked(getPageTextData).mockResolvedValue([page(1, ["alpha"]), page(2, []), page(3, ["beta"])] as never);
+    const progress: [number, number][] = [];
+    await findTextMatches(file, "zz", { password: "pw", onProgress: (done, total) => progress.push([done, total]) });
+    expect(getPageTextData).toHaveBeenCalledWith(file, { password: "pw" });
+    expect(progress).toEqual([[1, 3], [2, 3], [3, 3]]);
+  });
+
+  it("ignores non-text content items (marked-content markers) rather than tripping over them", async () => {
+    vi.mocked(getPageTextData).mockResolvedValue([
+      { pageNumber: 1, content: { items: [{ type: "beginMarkedContent" }, { str: "text", hasEOL: false }] }, viewport: {} },
+    ] as never);
+    const result = await findTextMatches(file, "absent");
+    expect(result.noTextLayerPages).toEqual([]);
+    expect(result.totalMatches).toBe(0);
+  });
+});
+

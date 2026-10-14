@@ -9,7 +9,7 @@
      that apply locally before pushing — it's faster to catch here than in CI. Delete lines that
      don't apply. -->
 
-- [ ] `npm run typecheck` / `npm run lint` / `npm run test` — clean
+- [ ] `npm run typecheck` / `npm run lint` / `npm run test:coverage` — clean
 - [ ] `npm run build` — clean
 - [ ] `npm run check:offline` / `npm run check:offline:runtime` — still zero network requests
       (only worth re-stating if this PR touches `index.html`, adds a dependency, or adds an
