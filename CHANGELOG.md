@@ -24,6 +24,12 @@ isn't optional bookkeeping — it's what the release notes are made of.
   made in Acrobat use) could stop the tool from reading *any* of the form's
   fields. Rich-text fields are now listed as not editable here and left
   as-is, instead of breaking the whole form or losing their formatting.
+- **Add Signature**: on a rotated page (a landscape scan, say) the signature
+  landed somewhere other than where you placed it on the preview, and
+  sideways or upside down. The same happened on pages whose coordinates
+  don't start at the sheet's corner, where it could end up partly off the
+  page. It now lands exactly where you drag it, the right way up, on every
+  page.
 
 ## [0.3.0] - 2026-09-05
 
