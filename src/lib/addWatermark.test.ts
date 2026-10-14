@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { addWatermark } from "./pdf-utils";
 import { makePdfFile, pageIndicesOf, pageSizeFor } from "@/test/fixtures";
+import { textMatrices } from "@/test/pdf-inspect";
+import { rotatedPageFile } from "@/test/rotated-page";
 
 const opts = (overrides: Partial<{ fontSize: number; color: [number, number, number]; opacity: number }> = {}) => ({
   fontSize: 24,
@@ -133,3 +135,23 @@ describe("watermark appearance options (F-10)", () => {
     expect(await pageIndicesOf(blob)).toEqual([0]);
   });
 });
+
+describe("watermark on rotated and offset pages (as displayed, not as stored)", () => {
+  const plain = { fontSize: 40, opacity: 1, rotation: 0, color: [0, 0, 0] as [number, number, number] };
+
+  it("reads horizontally on a /Rotate 90 page when asked for 0°", async () => {
+    const blob = await addWatermark(await rotatedPageFile(90), "DRAFT", plain);
+    const [[a, b]] = await textMatrices(blob);
+    // The page is shown turned clockwise, so horizontal on screen is +y in user space.
+    expect([a, b].map((n) => Math.round(n))).toEqual([0, 1]);
+  });
+
+  it("centres on the visible page when the MediaBox doesn't start at (0,0)", async () => {
+    const blob = await addWatermark(await rotatedPageFile(0, [100, 100]), "DRAFT", plain);
+    const [[, , , , e, f]] = await textMatrices(blob);
+    const width = (await (await PDFDocument.create()).embedFont("Helvetica-Bold")).widthOfTextAtSize("DRAFT", 40);
+    expect(e).toBeCloseTo(100 + 612 / 2 - width / 2, 3);
+    expect(f).toBeCloseTo(100 + 792 / 2, 3);
+  });
+});
+
