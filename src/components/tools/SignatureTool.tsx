@@ -10,8 +10,9 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 
 /** Pixels per PDF point for the on-screen page preview — same convention
- *  RedactTool.tsx uses, so its already-proven coordinate math (including for
- *  rotated pages) can be reused verbatim below. */
+ *  RedactTool.tsx uses. A placement dragged here is in the page *as
+ *  displayed* (after /Rotate); `placeSignatureImage` converts it into the
+ *  page's own coordinates, which differ on rotated or offset pages. */
 const PREVIEW_SCALE = 1.5;
 
 type PixelPoint = { x: number; y: number };
