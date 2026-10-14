@@ -43,8 +43,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm run test
+      # With coverage, so the thresholds in vite.config.ts actually gate a
+      # merge. They are documented as a ratchet that fails the build; until
+      # this ran here, nothing ever checked them and src/lib slipped under.
+      - name: Test (with coverage thresholds)
+        run: npm run test:coverage
 
       - name: Build
         run: npm run build
